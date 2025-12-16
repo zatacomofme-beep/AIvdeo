@@ -1,0 +1,75 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 2%; /* #050505 */
+    --foreground: 210 40% 98%;
+    
+    --card: 240 5% 7%; /* #121214 */
+    --card-foreground: 210 40% 98%;
+ 
+    --popover: 240 5% 7%;
+    --popover-foreground: 210 40% 98%;
+ 
+    --primary: 271 76% 53%; /* #8A2BE2 BlueViolet */
+    --primary-foreground: 210 40% 98%;
+ 
+    --secondary: 240 4% 16%;
+    --secondary-foreground: 210 40% 98%;
+ 
+    --muted: 240 4% 16%;
+    --muted-foreground: 215 20% 65%;
+ 
+    --accent: 186 100% 50%; /* #00E5FF Cyan */
+    --accent-foreground: 222 47% 11%;
+ 
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+ 
+    --border: 240 5% 16%; /* #2A2A2E */
+    --input: 240 5% 16%;
+    --ring: 271 76% 53%;
+ 
+    --radius: 0.5rem;
+  }
+ 
+  .dark {
+    --background: 0 0% 2%;
+    --foreground: 210 40% 98%;
+    /* ... repeat for dark mode consistency */
+  }
+}
+ 
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+}
+
+/* Custom Effects */
+.glass-panel {
+  @apply bg-[#121214]/80 backdrop-blur-md border border-[#2A2A2E];
+}
+
+.glow-text {
+  text-shadow: 0 0 10px rgba(138, 43, 226, 0.5);
+}
+
+.glow-box {
+  box-shadow: 0 0 15px rgba(138, 43, 226, 0.2);
+}
+
+.text-gradient-primary {
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-[#8A2BE2] to-[#6A5ACD];
+}
+
+/* Animation utilities */
+.animate-pulse-slow {
+  animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
