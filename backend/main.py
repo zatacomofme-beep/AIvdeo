@@ -156,11 +156,22 @@ async def chat_with_ai(prompt: str, system_prompt: str = None) -> str:
             model=LLM_MODEL_NAME,
             messages=messages,
             temperature=0.7,
-            max_tokens=500
+            max_tokens=2000  # 增加token限制
         )
         
         print(f"[DEBUG] AI原始响应类型: {type(response)}")
         print(f"[DEBUG] AI原始响应: {response}")
+        
+        # 详细检查choices
+        if hasattr(response, 'choices'):
+            print(f"[DEBUG] choices数量: {len(response.choices)}")
+            if len(response.choices) > 0:
+                first_choice = response.choices[0]
+                print(f"[DEBUG] 第一个choice: {first_choice}")
+                print(f"[DEBUG] message: {first_choice.message}")
+                print(f"[DEBUG] message.content: {first_choice.message.content}")
+                print(f"[DEBUG] content类型: {type(first_choice.message.content)}")
+                print(f"[DEBUG] content长度: {len(first_choice.message.content) if first_choice.message.content else 0}")
         
         # 处理云雾API的响应格式
         # 检查是否有 choices 属性
