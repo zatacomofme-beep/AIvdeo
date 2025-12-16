@@ -55,6 +55,10 @@ s3_client = boto3.client(
     aws_access_key_id=TOS_ACCESS_KEY,
     aws_secret_access_key=TOS_SECRET_KEY,
     region_name=TOS_REGION,
+    config=boto3.session.Config(
+        signature_version='s3v4',
+        s3={'addressing_style': 'virtual'}
+    )
 )
 
 # AI 客户端（用于对话和视频生成）
