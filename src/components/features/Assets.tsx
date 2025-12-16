@@ -2,13 +2,8 @@ import React from 'react';
 import { Play, Download, Trash2, Clock, CheckCircle2 } from 'lucide-react';
 
 export function Assets() {
-  const assets = [
-    { id: 1, type: 'video', url: 'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04', duration: '5s', status: 'completed', date: '2023-10-24' },
-    { id: 2, type: 'video', url: 'https://images.unsplash.com/photo-1518020382113-a7e8fc38eac9', duration: '5s', status: 'completed', date: '2023-10-23' },
-    { id: 3, type: 'image', url: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f', duration: null, status: 'completed', date: '2023-10-22' },
-    { id: 4, type: 'video', url: 'https://images.unsplash.com/photo-1511447333015-45b65e60f6d5', duration: '10s', status: 'processing', date: '2023-10-21' },
-    { id: 5, type: 'video', url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe', duration: '8s', status: 'completed', date: '2023-10-20' },
-  ];
+  // TODO: 从后端加载实际作品数据
+  const assets: any[] = [];
 
   return (
     <div className="flex-1 h-full overflow-y-auto bg-[#09090b] text-white p-8">
@@ -27,7 +22,16 @@ export function Assets() {
           </div>
         </div>
         
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+        {assets.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-[400px] text-center">
+            <div className="w-24 h-24 rounded-full bg-[#18181b] flex items-center justify-center mb-4">
+              <Play size={40} className="text-zinc-600" />
+            </div>
+            <h3 className="text-xl font-medium text-white mb-2">还没有作品</h3>
+            <p className="text-zinc-500 text-sm">开始生成您的第一个视频吧！</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
           {assets.map((asset) => (
             <div key={asset.id} className="group relative aspect-[9/16] bg-[#18181b] rounded-xl overflow-hidden border border-[#2A2A2E] hover:border-[#8A2BE2] transition-all cursor-pointer shadow-lg shadow-black/20">
               <img src={asset.url} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" alt="Asset" />
@@ -75,7 +79,8 @@ export function Assets() {
               )}
             </div>
           ))}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

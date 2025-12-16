@@ -2,7 +2,7 @@ import React, { useCallback } from 'react';
 import { useStore } from '../../lib/store';
 import { api } from '../../lib/api';
 import { cn } from '../../lib/utils';
-import { Upload, X, Maximize2, Lock, Fingerprint, Loader2 } from 'lucide-react';
+import { Upload, X, Lock, Fingerprint, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Button } from '../ui/button';
 
@@ -75,10 +75,9 @@ export function VisualCanvas() {
                 className="w-full h-full object-contain p-8" 
               />
               
-              {/* HUD Overlays - Only show if image is present */}
-              <div className="absolute inset-0 pointer-events-none">
-                {/* Scale Lock HUD */}
-                {productScale && (
+              {/* HUD Overlays - Scale Lock only */}
+              {productScale && (
+                <div className="absolute inset-0 pointer-events-none">
                    <motion.div 
                      initial={{ opacity: 0, scale: 0.9 }}
                      animate={{ opacity: 1, scale: 1 }}
@@ -93,16 +92,44 @@ export function VisualCanvas() {
                         物理引擎: 强制生效
                      </div>
                    </motion.div>
-                )}
-                
-                {/* Clear Button */}
+                </div>
+              )}
+              
+              {/* Control Buttons - 独立层，确保可点击 */}
+              <div className="absolute top-4 left-4 right-4 flex justify-between items-start z-10">
+                {/* Delete Button */}
                 <button 
-                  onClick={() => setUploadedImage("")} // Fixed: Passing empty string instead of null to match type
-                  className="absolute top-4 left-4 p-2 bg-black/50 text-white rounded-full hover:bg-red-500/20 hover:text-red-400 pointer-events-auto transition-colors"
+                  onClick={() => {
+                    console.log('[Canvas] 删除图片');
+                    setUploadedImage('');
+                  }}
+                  className="p-2 bg-black/70 text-white rounded-full hover:bg-red-500 hover:scale-110 transition-all shadow-lg"
+                  title="删除图片"
                 >
-                  <X size={16} />
+                  <X size={20} />
+                </button>
+                
+                {/* Re-upload Button */}
+                <button 
+                  onClick={() => {
+                    console.log('[Canvas] 重新上传');
+                    fileInputRef.current?.click();
+                  }}
+                  className="p-2 bg-black/70 text-white rounded-full hover:bg-[#8A2BE2] hover:scale-110 transition-all shadow-lg"
+                  title="重新上传"
+                >
+                  <Upload size={20} />
                 </button>
               </div>
+              
+              {/* Hidden file input */}
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                className="hidden" 
+                accept="image/*" 
+                onChange={handleFileChange}
+              />
             </div>
           ) : (
             <div className="text-center space-y-4">
@@ -141,43 +168,10 @@ export function VisualCanvas() {
         </div>
       </div>
 
-      {/* Timeline (Static Mock for MVP) */}
-      <div className="h-48 bg-[#0A0A0C] border-t border-[#2A2A2E] p-4">
-        <div className="flex items-center justify-between mb-2">
-           <span className="text-xs font-mono text-muted-foreground uppercase">时间轴预览</span>
-           <div className="flex gap-2">
-             <button className="p-1 hover:bg-white/10 rounded"><Maximize2 size={12} className="text-muted-foreground" /></button>
-           </div>
-        </div>
-        
-        {/* Timeline Tracks */}
-        <div className="relative h-full w-full overflow-hidden">
-          {/* Time Rulers */}
-          <div className="flex justify-between text-[10px] text-[#2A2A2E] font-mono border-b border-[#2A2A2E] pb-1 mb-2">
-            <span>00:00</span><span>00:05</span><span>00:10</span><span>00:15</span>
-          </div>
-          
-          {/* Video Track */}
-          <div className="h-12 bg-[#121214] rounded mb-2 flex items-center relative overflow-hidden">
-             {/* Mock clips */}
-             <div className="absolute left-0 w-[30%] h-full bg-purple-900/30 border-r border-purple-500/30 flex items-center justify-center text-[10px] text-purple-300">
-               开场 (钩子)
-             </div>
-             <div className="absolute left-[30%] w-[40%] h-full bg-blue-900/30 border-r border-blue-500/30 flex items-center justify-center text-[10px] text-blue-300">
-               产品演示
-             </div>
-             <div className="absolute left-[70%] w-[30%] h-full bg-green-900/30 flex items-center justify-center text-[10px] text-green-300">
-               行动号召
-             </div>
-          </div>
-          
-          {/* Audio Track */}
-          <div className="h-8 bg-[#121214] rounded flex items-center relative">
-             <div className="w-full h-4 mx-2" style={{
-               background: 'repeating-linear-gradient(90deg, #2A2A2E 0px, #2A2A2E 2px, transparent 2px, transparent 4px)'
-             }} />
-          </div>
-        </div>
+      {/* Timeline - 简化版 */}
+      <div className="h-16 bg-[#0A0A0C] border-t border-[#2A2A2E] px-4 flex items-center justify-between">
+        <span className="text-xs font-mono text-muted-foreground uppercase">时间轴</span>
+        <span className="text-xs text-zinc-600">视频生成后将显示在这里</span>
       </div>
     </div>
   );
