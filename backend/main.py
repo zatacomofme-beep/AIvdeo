@@ -156,9 +156,28 @@ async def chat_with_ai(prompt: str, system_prompt: str = None) -> str:
             temperature=0.7,
             max_tokens=500
         )
-        return response.choices[0].message.content
+        
+        # 处理云雾API的响应格式
+        # 检查是否有 choices 属性
+        if hasattr(response, 'choices') and len(response.choices) > 0:
+            return response.choices[0].message.content
+        # 如果是字典格式
+        elif isinstance(response, dict):
+            if 'choices' in response and len(response['choices']) > 0:
+                return response['choices'][0]['message']['content']
+            elif 'content' in response:
+                return response['content']
+        # 如果直接返回字符串
+        elif isinstance(response, str):
+            return response
+        else:
+            print(f"AI 响应格式异常: {type(response)}, {response}")
+            return "收到。正在分析您的请求..."
+            
     except Exception as e:
         print(f"AI 对话错误: {e}")
+        import traceback
+        traceback.print_exc()  # 打印详细堆栈
         return f"抱歉，AI 服务暂时不可用。请稍后再试。"
 
 
