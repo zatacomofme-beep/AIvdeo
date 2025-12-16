@@ -62,7 +62,7 @@ ai_client = None
 if LLM_API_KEY:
     ai_client = OpenAI(
         api_key=LLM_API_KEY,
-        base_url=LLM_BASE_URL
+        base_url=f"{LLM_BASE_URL}/v1"  # 云雾API需要加 /v1 后缀
     )
 
 
