@@ -55,12 +55,18 @@ if not VIDEO_API_KEY:
     print("WARNING: VIDEO_GENERATION_API_KEY 未配置，视频生成功能将使用模拟模式。")
 
 # S3 兼容客户端（用于访问火山云 TOS）
+from botocore.config import Config
+
 s3_client = boto3.client(
     "s3",
     endpoint_url=TOS_ENDPOINT,
     aws_access_key_id=TOS_ACCESS_KEY,
     aws_secret_access_key=TOS_SECRET_KEY,
     region_name=TOS_REGION,
+    config=Config(
+        signature_version='s3v4',
+        s3={'addressing_style': 'virtual'}
+    )
 )
 
 # AI 客户端（用于对话和视频生成）
