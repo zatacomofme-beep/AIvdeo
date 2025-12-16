@@ -359,6 +359,12 @@ async def upload_image(file: UploadFile = File(...)):
     ext = os.path.splitext(file.filename)[1] if file.filename else ""
     key = f"uploads/{time.strftime('%Y%m%d')}/{int(time.time()*1000)}-{uuid.uuid4().hex}{ext}"
 
+    print(f"[Upload] 开始上传: {file.filename}")
+    print(f"[Upload] Bucket: {TOS_BUCKET}")
+    print(f"[Upload] Key: {key}")
+    print(f"[Upload] Endpoint: {TOS_ENDPOINT}")
+    print(f"[Upload] AK: {TOS_ACCESS_KEY[:10]}...")
+
     try:
         s3_client.upload_fileobj(
             Fileobj=file.file,
@@ -366,11 +372,16 @@ async def upload_image(file: UploadFile = File(...)):
             Key=key,
             ExtraArgs={"ContentType": file.content_type},
         )
+        print(f"[Upload] 上传成功: {key}")
     except Exception as e:
-        print(f"TOS 上传失败: {e}")
+        print(f"[Upload Error] TOS 上传失败: {type(e).__name__}")
+        print(f"[Upload Error] 错误详情: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"上传失败: {str(e)}")
 
     url = build_public_url(TOS_BUCKET, key)
+    print(f"[Upload] 返回URL: {url}")
     return {"url": url}
 
 
