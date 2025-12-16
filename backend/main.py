@@ -40,7 +40,13 @@ VIDEO_BASE_URL = os.getenv("VIDEO_GENERATION_ENDPOINT", "https://yunwu.ai")
 
 
 if not TOS_ACCESS_KEY or not TOS_SECRET_KEY:
-    print("WARNING: TOS_ACCESS_KEY / TOS_SECRET_KEY 未配置，上传接口会失败。")
+    print("WARNING: TOS_ACCESS_KEY / TOS_SECRET_KEY 未配置,上传接口会失败。")
+else:
+    print(f"[TOS Config] AK: {TOS_ACCESS_KEY[:15]}...")
+    print(f"[TOS Config] SK: {TOS_SECRET_KEY[:15]}...")
+    print(f"[TOS Config] Bucket: {TOS_BUCKET}")
+    print(f"[TOS Config] Region: {TOS_REGION}")
+    print(f"[TOS Config] Endpoint: {TOS_ENDPOINT}")
 
 if not LLM_API_KEY:
     print("WARNING: LLM_API_KEY 未配置，聊天功能将使用模拟模式。")
@@ -55,10 +61,6 @@ s3_client = boto3.client(
     aws_access_key_id=TOS_ACCESS_KEY,
     aws_secret_access_key=TOS_SECRET_KEY,
     region_name=TOS_REGION,
-    config=boto3.session.Config(
-        signature_version='s3v4',
-        s3={'addressing_style': 'virtual'}
-    )
 )
 
 # AI 客户端（用于对话和视频生成）
