@@ -150,6 +150,8 @@ async def chat_with_ai(prompt: str, system_prompt: str = None) -> str:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
         
+        print(f"[DEBUG] 调用AI，模型: {LLM_MODEL_NAME}, 消息: {messages}")
+        
         response = ai_client.chat.completions.create(
             model=LLM_MODEL_NAME,
             messages=messages,
@@ -157,25 +159,34 @@ async def chat_with_ai(prompt: str, system_prompt: str = None) -> str:
             max_tokens=500
         )
         
+        print(f"[DEBUG] AI原始响应类型: {type(response)}")
+        print(f"[DEBUG] AI原始响应: {response}")
+        
         # 处理云雾API的响应格式
         # 检查是否有 choices 属性
         if hasattr(response, 'choices') and len(response.choices) > 0:
-            return response.choices[0].message.content
+            content = response.choices[0].message.content
+            print(f"[DEBUG] 提取内容(方式1): {content}")
+            return content or "AI返回了空内容"
         # 如果是字典格式
         elif isinstance(response, dict):
             if 'choices' in response and len(response['choices']) > 0:
-                return response['choices'][0]['message']['content']
+                content = response['choices'][0]['message']['content']
+                print(f"[DEBUG] 提取内容(方式2): {content}")
+                return content or "AI返回了空内容"
             elif 'content' in response:
-                return response['content']
+                print(f"[DEBUG] 提取内容(方式3): {response['content']}")
+                return response['content'] or "AI返回了空内容"
         # 如果直接返回字符串
         elif isinstance(response, str):
-            return response
+            print(f"[DEBUG] 提取内容(方式4): {response}")
+            return response or "AI返回了空内容"
         else:
-            print(f"AI 响应格式异常: {type(response)}, {response}")
+            print(f"[ERROR] AI 响应格式异常: {type(response)}, {response}")
             return "收到。正在分析您的请求..."
             
     except Exception as e:
-        print(f"AI 对话错误: {e}")
+        print(f"[ERROR] AI 对话错误: {e}")
         import traceback
         traceback.print_exc()  # 打印详细堆栈
         return f"抱歉，AI 服务暂时不可用。请稍后再试。"
