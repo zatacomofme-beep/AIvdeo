@@ -1,7 +1,11 @@
 /*! tailwindcss v4.1.3 | MIT License | https://tailwindcss.com */
 @layer properties {
   @supports (((-webkit-hyphens: none)) and (not (margin-trim: inline))) or ((-moz-orient: inline) and (not (color: rgb(from red r g b)))) {
-    *, :before, :after, ::backdrop {
+
+    *,
+    :before,
+    :after,
+    ::backdrop {
       --tw-translate-x: 0;
       --tw-translate-y: 0;
       --tw-translate-z: 0;
@@ -66,7 +70,9 @@
 }
 
 @layer theme {
-  :root, :host {
+
+  :root,
+  :host {
     --font-sans: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
     --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     --color-red-400: oklch(.704 .191 22.216);
@@ -145,7 +151,11 @@
 }
 
 @layer base {
-  *, :after, :before, ::backdrop {
+
+  *,
+  :after,
+  :before,
+  ::backdrop {
     box-sizing: border-box;
     border: 0 solid;
     margin: 0;
@@ -159,7 +169,8 @@
     padding: 0;
   }
 
-  html, :host {
+  html,
+  :host {
     -webkit-text-size-adjust: 100%;
     tab-size: 4;
     line-height: 1.5;
@@ -184,7 +195,12 @@
     text-decoration: underline dotted;
   }
 
-  h1, h2, h3, h4, h5, h6 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     font-size: inherit;
     font-weight: inherit;
   }
@@ -196,11 +212,15 @@
     text-decoration: inherit;
   }
 
-  b, strong {
+  b,
+  strong {
     font-weight: bolder;
   }
 
-  code, kbd, samp, pre {
+  code,
+  kbd,
+  samp,
+  pre {
     font-family: var(--default-mono-font-family, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);
     font-feature-settings: var(--default-mono-font-feature-settings, normal);
     font-variation-settings: var(--default-mono-font-variation-settings, normal);
@@ -211,7 +231,8 @@
     font-size: 80%;
   }
 
-  sub, sup {
+  sub,
+  sup {
     vertical-align: baseline;
     font-size: 75%;
     line-height: 0;
@@ -244,21 +265,35 @@
     display: list-item;
   }
 
-  ol, ul, menu {
+  ol,
+  ul,
+  menu {
     list-style: none;
   }
 
-  img, svg, video, canvas, audio, iframe, embed, object {
+  img,
+  svg,
+  video,
+  canvas,
+  audio,
+  iframe,
+  embed,
+  object {
     vertical-align: middle;
     display: block;
   }
 
-  img, video {
+  img,
+  video {
     max-width: 100%;
     height: auto;
   }
 
-  button, input, select, optgroup, textarea {
+  button,
+  input,
+  select,
+  optgroup,
+  textarea {
     font: inherit;
     font-feature-settings: inherit;
     font-variation-settings: inherit;
@@ -364,7 +399,8 @@
     box-shadow: none;
   }
 
-  button, input:where([type="button"], [type="reset"], [type="submit"]) {
+  button,
+  input:where([type="button"], [type="reset"], [type="submit"]) {
     appearance: button;
   }
 
@@ -395,41 +431,334 @@
   }
 
   :root {
-    --background: 0 0% 2%;
-    --foreground: 210 40% 98%;
-    --card: 240 5% 7%;
-    --card-foreground: 210 40% 98%;
-    --popover: 240 5% 7%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 271 76% 53%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 240 4% 16%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 240 4% 16%;
-    --muted-foreground: 215 20% 65%;
-    --accent: 186 100% 50%;
-    --accent-foreground: 222 47% 11%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 240 5% 16%;
-    --input: 240 5% 16%;
-    --ring: 271 76% 53%;
-    --radius: .5rem;
+    /* ========================================
+       SoraDirector 升级色彩系统 V2.0 (白色主题)
+       ======================================== */
+
+    /* 基础语义色（HSL格式，兼容 Tailwind） */
+    --background: 0 0% 100%;
+    --foreground: 0 0% 9%;
+    --card: 0 0% 98%;
+    --card-foreground: 0 0% 9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 9%;
+
+    /* 主题色：紫蓝渐变系 */
+    --primary: 239 84% 67%;
+    --primary-foreground: 0 0% 100%;
+
+    /* 次级色 */
+    --secondary: 240 4% 12%;
+    --secondary-foreground: 0 0% 98%;
+
+    /* 柔和色 */
+    --muted: 240 4% 12%;
+    --muted-foreground: 240 5% 55%;
+
+    /* 强调色：青色系 */
+    --accent: 187 94% 50%;
+    --accent-foreground: 0 0% 5%;
+
+    /* 危险色 */
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+
+    /* 边框与输入 */
+    --border: 240 4% 14%;
+    --input: 240 4% 14%;
+    --ring: 239 84% 67%;
+    --radius: 0.625rem;
+
+    /* ========================================
+       扩展色彩变量（直接使用）
+       ======================================== */
+
+    /* 🎨 渐变色系 */
+    --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    --gradient-accent: linear-gradient(135deg, #22d3ee 0%, #0ea5e9 100%);
+    --gradient-success: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+    --gradient-warning: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
+    --gradient-danger: linear-gradient(135deg, #ef4444 0%, #f87171 100%);
+    --gradient-cosmic: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+    --gradient-dark: linear-gradient(180deg, #0a0a0c 0%, #121215 100%);
+
+    /* 🌈 状态色（HEX格式，用于直接引用） */
+    --color-success: #10b981;
+    --color-success-light: #34d399;
+    --color-warning: #f59e0b;
+    --color-warning-light: #fbbf24;
+    --color-error: #ef4444;
+    --color-error-light: #f87171;
+    --color-info: #22d3ee;
+    --color-info-light: #67e8f9;
+
+    /* 🤍 三级背景层次 */
+    --bg-base: #ffffff;
+    --bg-elevated: #f9fafb;
+    --bg-surface: #f3f4f6;
+    --bg-overlay: #e5e7eb;
+    --bg-muted: #d1d5db;
+
+    /* 🔲 边框层次 */
+    --border-subtle: rgba(0, 0, 0, 0.06);
+    --border-default: rgba(0, 0, 0, 0.1);
+    --border-strong: rgba(0, 0, 0, 0.15);
+    --border-focus: rgba(99, 102, 241, 0.5);
+    --border-success: rgba(16, 185, 129, 0.5);
+
+    /* ✨ 发光效果 */
+    --glow-primary: 0 0 20px rgba(99, 102, 241, 0.35);
+    --glow-primary-strong: 0 0 30px rgba(99, 102, 241, 0.5);
+    --glow-accent: 0 0 20px rgba(34, 211, 238, 0.35);
+    --glow-success: 0 0 20px rgba(16, 185, 129, 0.35);
+    --glow-warning: 0 0 20px rgba(245, 158, 11, 0.35);
+    --glow-error: 0 0 20px rgba(239, 68, 68, 0.35);
+
+    /* 🌫️ 玻璃效果 */
+    --glass-bg: rgba(255, 255, 255, 0.7);
+    --glass-bg-hover: rgba(255, 255, 255, 0.85);
+    --glass-border: rgba(0, 0, 0, 0.08);
+    --glass-blur: 16px;
+
+    /* 📐 间距变量 */
+    --spacing-xs: 0.25rem;
+    --spacing-sm: 0.5rem;
+    --spacing-md: 1rem;
+    --spacing-lg: 1.5rem;
+    --spacing-xl: 2rem;
+
+    /* ⏱️ 动画时长 */
+    --duration-fast: 150ms;
+    --duration-normal: 250ms;
+    --duration-slow: 400ms;
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
   }
 
   .dark {
-    --background: 0 0% 2%;
-    --foreground: 210 40% 98%;
+    /* SoraDirector 深色主题 V2.0 */
+    --background: 240 10% 1%;
+    --foreground: 0 0% 98%;
+    --card: 240 6% 4%;
+    --card-foreground: 0 0% 98%;
+    --popover: 240 6% 4%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 239 84% 67%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 4% 10%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 4% 10%;
+    --muted-foreground: 240 5% 55%;
+    --accent: 187 94% 50%;
+    --accent-foreground: 0 0% 5%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 4% 10%;
+    --input: 240 4% 10%;
+    --ring: 239 84% 67%;
+    --radius: 0.625rem;
   }
 
+  /* ========================================
+     增强表单样式
+     ======================================== */
+
+  /* 输入框基础样式 */
+  input,
+  textarea,
+  select {
+    background-color: var(--bg-elevated) !important;
+    border-color: var(--border-default) !important;
+    color: #111827 !important;
+    transition: all var(--duration-normal) var(--ease-out);
+  }
+
+  input:focus,
+  textarea:focus,
+  select:focus {
+    border-color: var(--border-focus) !important;
+    box-shadow: var(--glow-primary), 0 0 0 1px var(--border-focus) !important;
+    background-color: var(--bg-surface) !important;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: rgba(0, 0, 0, 0.4);
+  }
+
+  /* 开关控件 */
+  [data-state="checked"] {
+    background-color: var(--color-success) !important;
+    border-color: var(--color-success) !important;
+    box-shadow: var(--glow-success);
+  }
+
+  /* ========================================
+     玻璃拟态工具类
+     ======================================== */
+
+  .glass {
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--glass-border);
+  }
+
+  .glass-card {
+    background: rgba(18, 18, 21, 0.8);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--border-default);
+  }
+
+  .glass-subtle {
+    background: rgba(255, 255, 255, 0.02);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid var(--border-subtle);
+  }
+
+  /* ========================================
+     渐变工具类
+     ======================================== */
+
+  .bg-gradient-primary {
+    background: var(--gradient-primary);
+  }
+
+  .bg-gradient-accent {
+    background: var(--gradient-accent);
+  }
+
+  .bg-gradient-cosmic {
+    background: var(--gradient-cosmic);
+  }
+
+  .text-gradient-primary {
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .text-gradient-cosmic {
+    background: var(--gradient-cosmic);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  /* ========================================
+     发光效果工具类
+     ======================================== */
+
+  .glow-primary {
+    box-shadow: var(--glow-primary);
+  }
+
+  .glow-primary-strong {
+    box-shadow: var(--glow-primary-strong);
+  }
+
+  .glow-accent {
+    box-shadow: var(--glow-accent);
+  }
+
+  .glow-success {
+    box-shadow: var(--glow-success);
+  }
+
+  /* ========================================
+     动画工具类
+     ======================================== */
+
+  .animate-glow-pulse {
+    animation: glow-pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes glow-pulse {
+
+    0%,
+    100% {
+      box-shadow: var(--glow-primary);
+    }
+
+    50% {
+      box-shadow: var(--glow-primary-strong);
+    }
+  }
+
+  .animate-gradient {
+    background-size: 200% 200%;
+    animation: gradient-shift 3s ease infinite;
+  }
+
+  @keyframes gradient-shift {
+    0% {
+      background-position: 0% 50%;
+    }
+
+    50% {
+      background-position: 100% 50%;
+    }
+
+    100% {
+      background-position: 0% 50%;
+    }
+  }
+
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+
+  @keyframes float {
+
+    0%,
+    100% {
+      transform: translateY(0px);
+    }
+
+    50% {
+      transform: translateY(-10px);
+    }
+  }
+
+  /* ========================================
+     自定义滚动条
+     ======================================== */
+
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  /* ========================================
+     全局样式
+     ======================================== */
+
   * {
-    border-color: oklch(.922 0 0);
+    border-color: hsl(var(--border));
   }
 
   body {
-    background-color: oklch(1 0 0);
-    color: oklch(.145 0 0);
-    font-family: Inter, system-ui, sans-serif;
+    background-color: var(--bg-base);
+    color: hsl(var(--foreground));
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 }
 
@@ -1895,11 +2224,13 @@
     }
   }
 
-  .selection\:bg-primary ::selection, .selection\:bg-primary::selection {
+  .selection\:bg-primary ::selection,
+  .selection\:bg-primary::selection {
     background-color: oklch(.205 0 0);
   }
 
-  .selection\:text-primary-foreground ::selection, .selection\:text-primary-foreground::selection {
+  .selection\:text-primary-foreground ::selection,
+  .selection\:text-primary-foreground::selection {
     color: oklch(.985 0 0);
   }
 
@@ -2214,15 +2545,15 @@
     opacity: .5;
   }
 
-  .has-\[\>svg\]\:px-2\.5:has( > svg) {
+  .has-\[\>svg\]\:px-2\.5:has(> svg) {
     padding-inline: calc(var(--spacing) * 2.5);
   }
 
-  .has-\[\>svg\]\:px-3:has( > svg) {
+  .has-\[\>svg\]\:px-3:has(> svg) {
     padding-inline: calc(var(--spacing) * 3);
   }
 
-  .has-\[\>svg\]\:px-4:has( > svg) {
+  .has-\[\>svg\]\:px-4:has(> svg) {
     padding-inline: calc(var(--spacing) * 4);
   }
 
@@ -2250,38 +2581,38 @@
     width: 1px;
   }
 
-  @media (width >= 48rem) {
+  @media (width >=48rem) {
     .md\:grid-cols-2 {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 
-  @media (width >= 48rem) {
+  @media (width >=48rem) {
     .md\:grid-cols-3 {
       grid-template-columns: repeat(3, minmax(0, 1fr));
     }
   }
 
-  @media (width >= 48rem) {
+  @media (width >=48rem) {
     .md\:text-sm {
       font-size: var(--text-sm);
       line-height: var(--tw-leading, var(--text-sm--line-height));
     }
   }
 
-  @media (width >= 64rem) {
+  @media (width >=64rem) {
     .lg\:grid-cols-3 {
       grid-template-columns: repeat(3, minmax(0, 1fr));
     }
   }
 
-  @media (width >= 64rem) {
+  @media (width >=64rem) {
     .lg\:grid-cols-4 {
       grid-template-columns: repeat(4, minmax(0, 1fr));
     }
   }
 
-  @media (width >= 80rem) {
+  @media (width >=80rem) {
     .xl\:grid-cols-5 {
       grid-template-columns: repeat(5, minmax(0, 1fr));
     }
@@ -2713,7 +3044,9 @@
 }
 
 @keyframes bounce {
-  0%, 100% {
+
+  0%,
+  100% {
     animation-timing-function: cubic-bezier(.8, 0, 1, 1);
     transform: translateY(-25%);
   }

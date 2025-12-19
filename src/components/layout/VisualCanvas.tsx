@@ -7,23 +7,43 @@ import { motion } from 'framer-motion';
 import { Button } from '../ui/button';
 
 export function VisualCanvas() {
-  const { uploadedImage, setUploadedImage, productScale } = useStore();
+  const { uploadedImage, setUploadedImage, productScale, character, script } = useStore();
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = React.useState(false);
+  const [imageBase64, setImageBase64] = React.useState<string | null>(null);
 
   const handleFileProcess = async (file: File) => {
      if (!file.type.startsWith('image/')) return;
      
      setIsUploading(true);
      try {
-       // Upload to custom backend
-       const url = await api.uploadImage(file);
+       // 同时进行：1. 上传到TOS获取URL  2. 转换为base64
+       const [url, base64] = await Promise.all([
+         api.uploadImage(file),
+         fileToBase64(file)
+       ]);
+       
        setUploadedImage(url);
+       setImageBase64(base64);
+       
+       // 将base64存储到store供后续使用
+       useStore.setState({ imageBase64: base64 });
+       useStore.getState().setPipelineStage('image_uploaded');
      } catch (error) {
        console.error("Upload failed", error);
      } finally {
        setIsUploading(false);
      }
+  };
+
+  // 将文件转换为base64
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
   };
 
   // Mock upload trigger
@@ -75,22 +95,50 @@ export function VisualCanvas() {
                 className="w-full h-full object-contain p-8" 
               />
               
-              {/* HUD Overlays - Scale Lock only */}
-              {productScale && (
+              {/* HUD Overlays */}
+              {(productScale || character) && (
                 <div className="absolute inset-0 pointer-events-none">
+                   {/* 左侧: 角色卡片 */}
+                   {character && (
+                     <motion.div 
+                       initial={{ opacity: 0, x: -20 }}
+                       animate={{ opacity: 1, x: 0 }}
+                       className="absolute top-8 left-8"
+                     >
+                       <div className="px-3 py-2 bg-cyan-900/30 border border-cyan-500/50 text-cyan-300 rounded text-xs backdrop-blur-md max-w-[200px]">
+                         <div className="font-bold mb-1 flex items-center gap-1">
+                           <Fingerprint size={10} />
+                           角色卡片
+                         </div>
+                         <div className="space-y-0.5 text-[10px] opacity-90">
+                           <div>🌍 {character.market || 'N/A'}</div>
+                           <div>👤 {character.gender || 'N/A'} / {character.age || 'N/A'}</div>
+                           <div>✨ {character.vibe || 'N/A'}</div>
+                         </div>
+                       </div>
+                     </motion.div>
+                   )}
+                   
+                   {/* 右侧: 尺寸锁定 & 物理引擎 */}
                    <motion.div 
                      initial={{ opacity: 0, scale: 0.9 }}
                      animate={{ opacity: 1, scale: 1 }}
                      className="absolute top-8 right-8 flex flex-col items-end gap-2"
                    >
-                     <div className="flex items-center gap-2 px-3 py-1.5 bg-[#8A2BE2]/20 border border-[#8A2BE2] text-[#8A2BE2] rounded text-xs font-mono font-bold tracking-wider uppercase backdrop-blur-md">
-                        <Lock size={12} />
-                        尺寸锁定: {productScale === 'mini' ? '口红级' : productScale === 'normal' ? '水瓶级' : '大瓶级'}
-                     </div>
-                     <div className="flex items-center gap-2 px-3 py-1.5 bg-cyan-900/20 border border-cyan-500/50 text-cyan-400 rounded text-xs font-mono font-bold tracking-wider uppercase backdrop-blur-md">
-                        <Fingerprint size={12} />
-                        物理引擎: 强制生效
-                     </div>
+                     {/* Scale Lock */}
+                     {productScale && (
+                       <div className="flex items-center gap-2 px-3 py-1.5 bg-[#8A2BE2]/20 border border-[#8A2BE2] text-[#8A2BE2] rounded text-xs font-mono font-bold tracking-wider uppercase backdrop-blur-md">
+                          <Lock size={12} />
+                          尺寸锁定: {productScale === 'mini' ? '口红级' : productScale === 'normal' ? '水瓶级' : '大瓶级'}
+                       </div>
+                     )}
+                     
+                     {productScale && (
+                       <div className="flex items-center gap-2 px-3 py-1.5 bg-cyan-900/20 border border-cyan-500/50 text-cyan-400 rounded text-xs font-mono font-bold tracking-wider uppercase backdrop-blur-md">
+                          <Fingerprint size={12} />
+                          物理引擎: 强制生效
+                       </div>
+                     )}
                    </motion.div>
                 </div>
               )}
@@ -168,10 +216,36 @@ export function VisualCanvas() {
         </div>
       </div>
 
-      {/* Timeline - 简化版 */}
-      <div className="h-16 bg-[#0A0A0C] border-t border-[#2A2A2E] px-4 flex items-center justify-between">
-        <span className="text-xs font-mono text-muted-foreground uppercase">时间轴</span>
-        <span className="text-xs text-zinc-600">视频生成后将显示在这里</span>
+      {/* Timeline - PRD 1.3 显示脚本分镜 */}
+      <div className="h-20 bg-[#0A0A0C] border-t border-[#2A2A2E] px-4 py-2 overflow-hidden">
+        {script && script.length > 0 ? (
+          <div className="h-full">
+            <div className="text-xs font-mono text-muted-foreground uppercase mb-2 flex items-center gap-2">
+              <span>🎬 分镜时间轴</span>
+              <span className="text-[10px] text-cyan-400">{script.length} 个镜头</span>
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {script.map((item: any, index: number) => (
+                <motion.div
+                  key={index}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.1 }}
+                  className="flex-shrink-0 px-3 py-1.5 bg-[#1E1E22] border border-[#2A2A2E] rounded text-xs hover:border-cyan-500/50 transition-colors cursor-pointer group"
+                >
+                  <div className="font-mono text-cyan-400 text-[10px] mb-0.5">{item.time}</div>
+                  <div className="text-gray-300 max-w-[120px] truncate group-hover:text-white">{item.audio}</div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5">{item.emotion}</div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="h-full flex items-center justify-between">
+            <span className="text-xs font-mono text-muted-foreground uppercase">时间轴</span>
+            <span className="text-xs text-zinc-600">脚本生成后将显示在这里</span>
+          </div>
+        )}
       </div>
     </div>
   );
