@@ -109,13 +109,11 @@ class Message(BaseModel):
     id: str
     role: str  # 'ai' | 'user'
     content: str
-    type: Optional[str] = None  # 'text' | 'scale_selector' | 'script_review'
+    type: Optional[str] = None  # 'text' | 'script_review'
     chips: Optional[List[Chip]] = None
 
 
 class ProjectUpdate(BaseModel):
-    scale: Optional[str] = None  # 'mini' | 'normal' | 'large'
-    constraints: Optional[dict] = None  # 存储约束信息
     character: Optional[dict] = None  # 角色信息
     script: Optional[List[Any]] = None
     product_name: Optional[str] = None  # 产品名称
@@ -133,8 +131,7 @@ class ChatRequest(BaseModel):
     history: Optional[List[dict]] = None  # 对话历史 [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]
 
 
-class LockPhysicsRequest(BaseModel):
-    scale: str  # 'mini' | 'normal' | 'large'
+# 已移除尺寸锁定相关的数据模型
 
 
 class GenerateVideoRequest(BaseModel):
@@ -172,44 +169,14 @@ class GenerateScriptFromProductRequest(BaseModel):
     """新业务流程：根据商品信息生成脚本"""
     productName: str
     productImages: List[str]  # 5张商品图片URL
-    usageMedia: dict  # 使用方法：{"type": "video"|"images"|"text", "videoUrl": ..., "imageUrls": ..., "textDescription": ...}
+    usageMethod: str  # 使用方式（如"喷雾"、"佩戴"）
+    sellingPoints: List[str]  # 核心卖点
+    language: str  # 语言（zh-CN, en-US, id-ID, vi-VN）
+    duration: int  # 时长（15或25）
 
-class UnderstandProductRequest(BaseModel):
-    """B 阶段：产品理解请求"""
-    imageUrl: Optional[str] = None
-    imageBase64: Optional[str] = None
+# 已移除产品理解相关的数据模型 - 不再需要视觉识别功能
 
-# B 阶段：产品理解返回结构
-class SizeOption(BaseModel):
-    label: str
-    value: str  # 'mini' | 'normal' | 'large'
-    description: Optional[str] = None
-
-class ProductUnderstanding(BaseModel):
-    productName: Optional[str] = None
-    productType: Optional[str] = None
-    attributes: Optional[dict] = None
-    sizeOptions: Optional[List[SizeOption]] = None
-    negativePrompts: Optional[List[str]] = None  # 负面提示词，用于避免产品变形
-
-class MarketAnalysisRequest(BaseModel):
-    productUnderstanding: Optional[dict] = None
-    overrides: Optional[dict] = None
-
-class StrategyRequest(BaseModel):
-    productUnderstanding: Optional[dict] = None
-    marketAnalysis: Optional[dict] = None
-
-class MatchStyleRequest(BaseModel):
-    productUnderstanding: Optional[dict] = None
-    marketAnalysis: Optional[dict] = None
-    creativeStrategy: Optional[dict] = None
-
-class GenerateScriptsRequest(BaseModel):
-    productUnderstanding: Optional[dict] = None
-    marketAnalysis: Optional[dict] = None
-    creativeStrategy: Optional[dict] = None
-    visualStyle: Optional[dict] = None
+# 已移除复杂的多阶段分析相关的数据模型
 
 
 # ======================
@@ -672,96 +639,7 @@ async def send_chat(req: ChatRequest):
 
 回答风格：简洁、专业、友好。"""
     
-    # 逻辑分支 1: 识别容器/产品（按PRD 1.1 视觉锁定）
-    # 如果有图片且是请求识别产品，返回尺寸选择器
-    if req.image_url and ("识别" in content or "分析" in content):
-        # 调用AI识别产品并生成适配的尺寸选项
-        try:
-            vision_prompt = f"""{content}
-
-请识别这个产品，并根据产品类型推荐3个合适的尺寸参考物。
-
-返回JSON格式：
-{{
-  "product_name": "产品名称",
-  "product_type": "产品类型（如：喷雾瓶/衣服/食物/电子产品等）",
-  "size_options": [
-    {{"label": "参考物名称+emoji（如：💄口红级）", "value": "mini", "description": "约10cm"}},
-    {{"label": "参考物名称+emoji", "value": "normal", "description": "约30cm"}},
-    {{"label": "参考物名称+emoji", "value": "large", "description": "约50cm+"}}
-  ]
-}}
-
-示例1（喷雾瓶）：
-- 💄 口红级 (10cm)
-- 🥤 矿泉水瓶级 (30cm)
-- 🍾 大酒瓶级 (50cm+)
-
-示例2（衣服）：
-- 👶 婴儿装 (小号)
-- 👕 成人T恤 (中号)
-- 🧥 外套大衣 (大号)
-
-示例3（食物）：
-- 🍪 饼干级 (小份)
-- 🍔 汉堡级 (中份)
-- 🍕 披萨级 (大份)
-
-请根据识别的产品类型，给出最合适的参考物。"""
-            
-            ai_response = await chat_with_ai(vision_prompt, system_prompt, image_url=req.image_url)
-            
-            # 解析JSON
-            import json
-            import re
-            json_match = re.search(r'\{[\s\S]*\}', ai_response)
-            if json_match:
-                product_data = json.loads(json_match.group())
-                product_name = product_data.get('product_name', '该产品')
-                size_options = product_data.get('size_options', [])
-                
-                # 如果AI返回了自定义选项，使用它们；否则用默认值
-                if size_options and len(size_options) >= 3:
-                    chips = [
-                        Chip(label=opt['label'], value=opt['value'])
-                        for opt in size_options[:3]
-                    ]
-                else:
-                    # 默认选项（通用）
-                    chips = [
-                        Chip(label="🤏 迷你级", value="mini"),
-                        Chip(label="👐 标准级", value="normal"),
-                        Chip(label="🙌 超大级", value="large"),
-                    ]
-                
-                msg = Message(
-                    id=now_id,
-                    role="ai",
-                    content=f"识别到{product_name}。为了防止AI产生幻觉搞错尺寸，请确认实际大小：",
-                    type="scale_selector",
-                    chips=chips,
-                )
-                # 存储产品名称
-                update = ProjectUpdate(product_name=product_name)
-                return ChatResponse(message=msg, projectUpdate=update)
-                
-        except Exception as e:
-            print(f"AI识别错误: {e}")
-            import traceback
-            traceback.print_exc()
-            # 失败时返回默认尺寸选择器
-            msg = Message(
-                id=now_id,
-                role="ai",
-                content="图片已上传成功！为了防止AI产生幻觉搞错尺寸，请确认实际大小：",
-                type="scale_selector",
-                chips=[
-                    Chip(label="💄 口红级 (10cm)", value="mini"),
-                    Chip(label="🥤 矿泉水瓶级", value="normal"),
-                    Chip(label="🍾 大酒瓶级", value="large"),
-                ],
-            )
-            return ChatResponse(message=msg)
+    # 直接进行自然对话，不再需要视觉识别和尺寸选择
     
      # 使用真实 AI 生成回复（一次对话完成所有任务）
     try:
@@ -926,79 +804,81 @@ async def generate_script(req: GenerateScriptRequest):
 @app.post("/generate-script-from-product")
 async def generate_script_from_product(req: GenerateScriptFromProductRequest):
     """
-    新业务流程：根据5张商品图片+使用方法生成视频脚本
+    新业务流程：根据5张商品图片+使用方法+卖点生成视频脚本
+    适配新的4阶段工作流程
     """
     try:
         # 验证输入
         if len(req.productImages) != 5:
             raise HTTPException(status_code=400, detail="必须提供恰好5张商品图片")
         
-        if not req.productName:
-            raise HTTPException(status_code=400, detail="商品名称不能为空")
+        if not req.productName or not req.usageMethod:
+            raise HTTPException(status_code=400, detail="商品名称和使用方式不能为空")
         
-        if not req.usageMedia or not req.usageMedia.get('type'):
-            raise HTTPException(status_code=400, detail="必须提供使用方法说明")
+        if not req.sellingPoints or len(req.sellingPoints) == 0:
+            raise HTTPException(status_code=400, detail="必须提供至少一个核心卖点")
         
-        # 构建使用方法描述
-        usage_desc = ""
-        if req.usageMedia['type'] == 'video':
-            usage_desc = f"使用方法视频：{req.usageMedia.get('videoUrl', '')}"
-        elif req.usageMedia['type'] == 'images':
-            usage_desc = f"使用方法图文说明：{len(req.usageMedia.get('imageUrls', []))}张图片"
-        elif req.usageMedia['type'] == 'text':
-            usage_desc = f"使用方法：{req.usageMedia.get('textDescription', '')}"
+        # 根据语言设置提示词
+        language_map = {
+            'zh-CN': '中文',
+            'en-US': '英文',
+            'id-ID': '印尼语',
+            'vi-VN': '越南语',
+        }
+        target_language = language_map.get(req.language, '中文')
         
-        # 构建AI Prompt
+        # 构廻AI Prompt
+        selling_points_text = '\n'.join([f"- {point}" for point in req.sellingPoints])
+        
         prompt = f"""你是专业的短视频脚本创作导演。
 
 商品信息：
 - 商品名称：{req.productName}
-- 商品图片：共{len(req.productImages)}张
-- {usage_desc}
+- 使用方式：{req.usageMethod}
+- 商品图片：共{len(req.productImages)}张高保真图片
 
-任务：根据商品信息和使用方法，创作一个10-15秒的产品展示短视频脚本。
+核心卖点：
+{selling_points_text}
+
+目标语言：{target_language}
+视频时长：{req.duration}秒
+
+任务：创作一个{req.duration}秒的产品展示短视频脚本。
 
 要求：
 1. 生成3-5个镜头，每个镜头对应一张商品图片（imageIndex: 0-4）
 2. 每个镜头包含：时间、场景、动作、台词、情绪
-3. 台词要口语化、自然，符合UGC风格
-4. 情绪弧线：从“好奇/中性”到“满意/兴奋”
-5. 结合使用方法说明，展示产品功能和使用场景
+3. 台词必须使用{target_language}，口语化、自然，符合UGC风格
+4. 突出核心卖点，展示{req.usageMethod}过程
+5. 情绪弧线：从“好奇/中性”到“满意/兴奋”
 
 返回JSON格式：
 {{
   "shots": [
     {{
-      "time": "0-3s",
+      "time": "0-{int(req.duration/3)}s",
       "scene": "场景描述",
-      "action": "人物/产品动作",
-      "audio": "台词内容",
+      "action": "{req.usageMethod}动作",
+      "audio": "{target_language}台词内容",
       "emotion": "情绪状态",
       "imageIndex": 0
-    }},
-    {{
-      "time": "3-6s",
-      "scene": "特写镜头",
-      "action": "展示产品细节",
-      "audio": "介绍功能特点",
-      "emotion": "专注",
-      "imageIndex": 1
     }}
   ]
 }}
 
-示例台词风格：
-- “这款耳机轻巧便携，特别适合通勤使用”
-- “配备Type-C快充接口，充电超方便”
-- “音质清晰，降噪效果也很棒”
+示例台词风格（{target_language}）：
+- 第一镜头：介绍产品亮相，吸引注意力
+- 中间镜头：展示具体卖点和使用方法
+- 最后镜头：总结优势，强调价值
 
 仅返回JSON，不要其他文字。"""
         
-        system_prompt = """你是专业的短视频脚本创作导演，擅长：
-1. UGC风格内容创作，口语化表达
-2. 产品功能与使用场景结合
-3. 镜头设计紧凑，节奏明快
-4. 情绪起伏自然，吸引力强"""
+        system_prompt = f"""你是专业的短视频脚本创作导演，擅长：
+1. 多语言UGC风格内容创作（中文、英文、印尼语、越南语）
+2. 产品卖点与使用场景结合
+3. 镜头设计紧凑，节奏明快（15s或25s）
+4. 情绪起伏自然，吸引力强
+5. 台词必须使用目标语言（{target_language}）"""
         
         # 调用AI生成脚本
         ai_response = await chat_with_ai(
@@ -1045,230 +925,16 @@ async def generate_script_from_product(req: GenerateScriptFromProductRequest):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"生成脚本失败: {str(e)}")
 
-@app.post("/understand-product")
-async def understand_product(req: UnderstandProductRequest):
-    """B 阶段：产品理解（多模态识图 + 结构化 JSON 输出）"""
-    print("="*80)
-    print("[VERSION CHECK] /understand-product endpoint called - VERSION: 2025-12-17-v3-sora2-optimized")
-    print(f"[REQUEST] imageUrl: {req.imageUrl is not None}, imageBase64: {req.imageBase64 is not None}")
-    print("="*80)
-    try:
-        img = req.imageBase64 or req.imageUrl
-        print(f"[DEBUG] Image source selected: {'base64' if req.imageBase64 else 'url'}")
-        # 系统提示词：严格 JSON 模板
-        system_prompt = """你是产品图理解专家。请基于输入图片，输出严格 JSON：
-{
-  "productName": "产品名称",
-  "productType": "类型英文或中文",
-  "attributes": { "material": "材质?", "color": "主色?", "shape": "形态?" },
-  "sizeOptions": [
-    { "label": "💄 口红级 (10cm)", "value": "mini", "description": "约10cm" },
-    { "label": "🥤 矿泉水瓶级 (30cm)", "value": "normal", "description": "约30cm" },
-    { "label": "🍾 大酒瓶级 (50cm+)", "value": "large", "description": "约50cm+" }
-  ],
-  "negativePrompts": ["负面提示词1", "负面提示词2"]
-}
+# 已移除 /understand-product 端点 - 不再需要视觉识别功能
 
-negativePrompts 说明：生成视频时需要避免的特征，如：
-- 对于方形产品：["rounded corners", "curved edges", "deformed"]
-- 对于精细产品：["blurry details", "bad anatomy", "extra parts"]
-- 通用：["distorted", "malformed", "low quality"]
-
-仅返回上述 JSON，不要解释文字。"""
-        user_prompt = "请识别产品并填充 JSON 字段。"
-        ai_response = await chat_with_ai(user_prompt, system_prompt, image_url=img)
-        print(f"[DEBUG] AI response received, length: {len(ai_response) if ai_response else 0}")
-        print(f"[DEBUG] AI response content (first 500 chars): {ai_response[:500] if ai_response else 'None'}")
-        import json, re
-        
-        # 尝试多种方式提取JSON
-        json_match = re.search(r'\{[\s\S]*?\}(?=[^}]*$)', ai_response)  # 匹配最后一个完整的JSON对象
-        if not json_match:
-            # 尝试匹配第一个JSON对象
-            json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', ai_response)
-        if not json_match:
-            print("[ERROR] No JSON found in AI response")
-            print(f"[ERROR] Full AI response: {ai_response}")
-            raise HTTPException(status_code=500, detail="产品理解失败，格式错误")
-        result = json.loads(json_match.group())
-        print(f"[DEBUG] Parsed JSON result: {result.get('productName', 'N/A')}")
-        pu = ProductUnderstanding(
-            productName=result.get("productName"),
-            productType=result.get("productType"),
-            attributes=result.get("attributes"),
-            sizeOptions=[SizeOption(**so) for so in result.get("sizeOptions", [])] if result.get("sizeOptions") else None,
-            negativePrompts=result.get("negativePrompts", ["deformed", "distorted", "malformed", "low quality"])  # 默认负面提示词
-        )
-        print("[SUCCESS] Product understanding completed successfully")
-        return {
-            "success": True,
-            "projectUpdate": {
-                "productUnderstanding": pu.model_dump()
-            }
-        }
-    except Exception as e:
-        print(f"[B阶段] 产品理解错误: {e}")
-        import traceback
-        traceback.print_exc()
-        return {
-            "success": False,
-            "error": str(e),
-            "projectUpdate": {
-                "productUnderstanding": {
-                    "productName": None,
-                    "productType": None,
-                    "attributes": {},
-                    "sizeOptions": [
-                        {"label": "💄 口红级 (10cm)", "value": "mini", "description": "约10cm"},
-                        {"label": "🥤 矿泉水瓶级 (30cm)", "value": "normal", "description": "约30cm"},
-                        {"label": "🍾 大酒瓶级 (50cm+)", "value": "large", "description": "约50cm+"}
-                    ]
-                }
-            }
-        }
-
-@app.post("/analyze-market")
-async def analyze_market(req: MarketAnalysisRequest):
-    """C 阶段：市场定位分析"""
-    try:
-        context = req.productUnderstanding or {}
-        system_prompt = """你是市场分析专家。输出严格 JSON：
-{
-  "market": "目标市场（如：中国/印尼/越南...）",
-  "segments": ["核心细分人群1","核心细分人群2"],
-  "persona": { "age": "GenZ/Millennial", "gender": "Female/Male/不限", "traits": ["真实","潮流"] }
-}
-仅返回上述 JSON。"""
-        user_prompt = f"根据产品理解进行市场定位分析：{context}"
-        ai_response = await chat_with_ai(user_prompt, system_prompt)
-        import json, re
-        json_match = re.search(r'\{[\s\S]*\}', ai_response)
-        if not json_match:
-            raise HTTPException(status_code=500, detail="市场分析失败，格式错误")
-        result = json.loads(json_match.group())
-        return {"success": True, "projectUpdate": {"marketAnalysis": result}}
-    except Exception as e:
-        print(f"[C阶段] 市场分析错误: {e}")
-        return {"success": False, "error": str(e), "projectUpdate": {"marketAnalysis": {}}}
-
-@app.post("/generate-strategy")
-async def generate_strategy(req: StrategyRequest):
-    """D 阶段：创意策略生成"""
-    try:
-        pu = req.productUnderstanding or {}
-        ma = req.marketAnalysis or {}
-        system_prompt = """你是创意策略导演。输出严格 JSON：
-{
-  "keyMessage": "核心信息",
-  "painReliefArc": ["痛点A","解决B","转折C","满意D"],
-  "tone": "真实/精致/潮流/简约",
-  "narrative": "叙事策略简述"
-}
-仅返回上述 JSON。"""
-        user_prompt = f"基于产品与市场生成创意策略：{pu} {ma}"
-        ai_response = await chat_with_ai(user_prompt, system_prompt)
-        import json, re
-        json_match = re.search(r'\{[\s\S]*\}', ai_response)
-        if not json_match:
-            raise HTTPException(status_code=500, detail="策略生成失败，格式错误")
-        result = json.loads(json_match.group())
-        return {"success": True, "projectUpdate": {"creativeStrategy": result}}
-    except Exception as e:
-        print(f"[D阶段] 策略生成错误: {e}")
-        return {"success": False, "error": str(e), "projectUpdate": {"creativeStrategy": {}}}
-
-@app.post("/match-style")
-async def match_style(req: MatchStyleRequest):
-    """E 阶段：视觉风格匹配"""
-    try:
-        pu = req.productUnderstanding or {}
-        ma = req.marketAnalysis or {}
-        cs = req.creativeStrategy or {}
-        system_prompt = """你是风格匹配专家。输出严格 JSON：
-{
-  "styleCandidates": [
-    { "id": "authentic", "label": "真实", "pros": ["亲近UGC"], "cons": ["可能略显朴素"] },
-    { "id": "delicate", "label": "精致", "pros": ["画面高级"], "cons": ["成本较高"] },
-    { "id": "trendy", "label": "潮流", "pros": ["年轻化"], "cons": ["易过时"] }
-  ]
-}
-仅返回上述 JSON。"""
-        user_prompt = f"为创意策略匹配视觉风格候选：{pu} {ma} {cs}"
-        ai_response = await chat_with_ai(user_prompt, system_prompt)
-        import json, re
-        json_match = re.search(r'\{[\s\S]*\}', ai_response)
-        if not json_match:
-            raise HTTPException(status_code=500, detail="风格匹配失败，格式错误")
-        result = json.loads(json_match.group())
-        return {"success": True, "projectUpdate": {"styleCandidates": result.get("styleCandidates", [])}}
-    except Exception as e:
-        print(f"[E阶段] 风格匹配错误: {e}")
-        return {"success": False, "error": str(e), "projectUpdate": {"styleCandidates": []}}
-
-@app.post("/generate-scripts")
-async def generate_scripts(req: GenerateScriptsRequest):
-    """F 阶段：生成三套脚本"""
-    try:
-        pu = req.productUnderstanding or {}
-        ma = req.marketAnalysis or {}
-        cs = req.creativeStrategy or {}
-        vs = req.visualStyle or {}
-        system_prompt = """你是短视频编剧。输出严格 JSON（3 套 10s 脚本，每套若干分镜）：
-{
-  "scripts": [
-    [ { "time": "0-3s", "scene": "...", "action": "...", "audio": "...", "emotion": "..." }, { "time": "3-6s", "...": "..." }, { "time": "6-10s", "...": "..." } ],
-    [ ... ],
-    [ ... ]
-  ]
-}
-仅返回上述 JSON。"""
-        user_prompt = f"基于上下文生成三套脚本：{pu} {ma} {cs} {vs}"
-        ai_response = await chat_with_ai(user_prompt, system_prompt)
-        import json, re
-        json_match = re.search(r'\{[\s\S]*\}', ai_response)
-        if not json_match:
-            raise HTTPException(status_code=500, detail="脚本生成失败，格式错误")
-        result = json.loads(json_match.group())
-        return {"success": True, "projectUpdate": {"scriptOptions": result.get("scripts", [])}}
-    except Exception as e:
-        print(f"[F阶段] 三脚本生成错误: {e}")
-        return {"success": False, "error": str(e), "projectUpdate": {"scriptOptions": []}}
+# 已移除复杂的多阶段分析接口 - 简化为直接的脚本生成流程
 
 
 # ======================
 # 4. 锁定物理属性（旧架构，保留兼容）
 # ======================
 
-@app.post("/lock-physics", response_model=ChatResponse)
-async def lock_physics(req: LockPhysicsRequest):
-    """
-    锁定尺寸约束后，开始选角环节（PRD 1.2）
-    动态生成问题，而非固定模板
-    """
-    now_id = str(int(time.time() * 1000))
-
-    # 根据尺寸生成约束描述
-    scale_constraints = {
-        "mini": "miniature size, fits in palm, handheld object",
-        "normal": "standard size, typical everyday object",
-        "large": "large size, oversized object"
-    }
-    
-    constraint_text = scale_constraints.get(req.scale, "standard size")
-    
-    # PRD 1.2: 开始选角 - 动态生成问题
-    # 根据产品类型智能调整问法
-    msg = Message(
-        id=now_id,
-        role="ai",
-        content=f"尺寸已锁定为 [{req.scale}]。\n\n现在开始选角：这个视频主要面向哪个市场？主角什么风格？\n（例如：印尼年轻女生，真实风格 / 中国一线城市，时尚潮流）",
-        type="text",
-    )
-    update = ProjectUpdate(
-        scale=req.scale,
-        constraints={"scale": constraint_text}
-    )
-    return ChatResponse(message=msg, projectUpdate=update)
+# 已移除 /lock-physics 端点 - 不再需要尺寸约束功能
 
 
 # ======================

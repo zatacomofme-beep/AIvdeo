@@ -1,6 +1,11 @@
 import React from 'react';
-import { VideoGenerator } from './components/VideoGenerator';
+import { ModernLayout } from './components/layout/ModernLayout';
+import { MainWorkspace } from './components/layout/MainWorkspace';
 
 export default function App() {
-  return <VideoGenerator />;
+  return (
+    <ModernLayout>
+      <MainWorkspace />
+    </ModernLayout>
+  );
 }

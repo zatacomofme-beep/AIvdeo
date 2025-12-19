@@ -4,26 +4,42 @@ import { create } from 'zustand';
 // 新的表单数据结构
 // ===========================
 
-// 1. 产品信息（新业务流程）
+// ===========================
+// 阶段1：商品建模 (Product Modeling)
+// ===========================
 export interface ProductInfo {
-  productImages: string[];  // 5张商品图片URL
+  // 多图上传（5张高保真图片）
+  productImages: string[];  // 5张商品图片URL（TOS）
   imagesBase64: string[];   // 5张图片的base64编码
-  productName: string;
-  usageMedia: {           // 使用方法视频或图文说明
-    type: 'video' | 'images' | null;
-    videoUrl?: string;
-    imageUrls?: string[];
-    textDescription?: string;
-  };
+  
+  // 结构化表单
+  productName: string;      // 产品的品牌与品类名
+  brandName?: string;       // 品牌名称
+  category?: string;        // 品类
+  usageMethod: string;      // 使用方式（如"喷雾"、"佩戴"）
+  sellingPoints: string[];  // 核心卖点（AI生成脚本的关键Prompt来源）
+  
+  // 持久化存档
+  isSaved: boolean;         // 是否已保存为固定产品
+  savedAt?: string;         // 保存时间
+  productId?: string;       // 产品唯一ID（用于侧边栏加载）
 }
 
-// 2. 视频风格
-export interface VideoStyle {
-  styleType: 'realistic' | 'casual' | 'professional' | 'cinematic';
-  duration: 10 | 15 | 20;
-  orientation: 'portrait' | 'landscape';
-  quality: 'standard' | 'high';
-  customDescription: string;
+// ===========================
+// 阶段2：导演配置 (Director Settings)
+// ===========================
+export interface DirectorSettings {
+  // 语言定位
+  language: 'zh-CN' | 'en-US' | 'id-ID' | 'vi-VN';  // 中文、英文、印尼语、越南语
+  
+  // 分辨率控制
+  resolution: '720p' | '1080p';  // 720P快速渲染，1080P高清成品
+  
+  // 时长定义
+  duration: 15 | 25;  // 15s黄金转化时段，25s深度展示时段
+  
+  // 视频方向
+  orientation: 'portrait' | 'landscape';  // 9:16竖屏或16:9横屏
 }
 
 // 3. 场景设置
@@ -55,24 +71,28 @@ export interface Character {
   description: string;
 }
 
-// 6. 脚本（AI生成）
+// ===========================
+// 阶段3：脚本创作 (Scripting Engine)
+// ===========================
 export interface ScriptShot {
-  time: string;
-  scene: string;
-  action: string;
-  audio: string;
-  emotion: string;
+  time: string;         // 时间轴（如"0-3s"）
+  scene: string;        // 分镜场景描述
+  action: string;       // 动作描述
+  audio: string;        // 台词内容
+  emotion: string;      // 情绪状态
   imageIndex?: number;  // 对应使用的图片索引（0-4）
 }
 
 export interface Script {
-  shots: ScriptShot[];
+  shots: ScriptShot[];  // 分镜列表
   emotionArc: {
     start: 'anxious' | 'curious' | 'neutral';
     end: 'satisfied' | 'excited' | 'relieved';
   };
-  mode: 'ai' | 'manual';
-  isGenerated: boolean;  // 标记脚本是否已生成
+  mode: 'ai' | 'manual';     // AI生成或手动编辑
+  isGenerated: boolean;       // 标记脚本是否已生成
+  aiAssisted: boolean;        // 是否由AI导演辅助生成
+  lastModified?: string;      // 最后修改时间
 }
 
 // 7. 音频氛围
@@ -93,56 +113,67 @@ export interface OverallFeeling {
 // Store 状态
 // ===========================
 
+// ===========================
+// 阶段4：生成与交付 (Rendering & Delivery)
+// ===========================
+export interface RenderingStatus {
+  status: 'idle' | 'rendering' | 'completed' | 'failed';
+  progress: number;        // 进度百分比（0-100）
+  taskId: string | null;   // 任务ID
+  estimatedTime: number;   // 预计剩余时间（秒）
+  videoUrl: string | null; // 生成的视频URL
+}
+
+// ===========================
+// 主Store接口
+// ===========================
 interface FormStore {
-  // 表单数据
+  // 阶段1：商品建模
   productInfo: ProductInfo;
-  videoStyle: VideoStyle;
-  scene: Scene;
-  camera: Camera;
-  character: Character;
+  savedProducts: ProductInfo[];  // 已保存的固定产品列表
+  
+  // 阶段2：导演配置
+  directorSettings: DirectorSettings;
+  
+  // 阶段3：脚本创作
   script: Script;
-  audio: Audio;
-  overallFeeling: OverallFeeling;
   
-  // 业务流程状态
-  currentStep: 'upload' | 'script_generating' | 'script_ready' | 'video_generating' | 'completed';
+  // 阶段4：生成与交付
+  rendering: RenderingStatus;
   
-  // 实时Prompt
-  assembledPrompt: string;
+  // 工作流程状态
+  currentStage: 1 | 2 | 3 | 4;  // 当前处于哪个阶段
   
-  // 视频生成状态
-  isGenerating: boolean;
-  generatedVideoUrl: string | null;
-  
-  // 更新方法
+  // 方法：阶段1 - 商品建模
   updateProductInfo: (info: Partial<ProductInfo>) => void;
-  updateVideoStyle: (style: Partial<VideoStyle>) => void;
-  updateScene: (scene: Partial<Scene>) => void;
-  updateCamera: (camera: Partial<Camera>) => void;
-  updateCharacter: (character: Partial<Character>) => void;
+  saveProduct: () => Promise<void>;           // 保存为固定产品
+  loadProduct: (productId: string) => void;   // 从侧边栏加载固定产品
+  deleteProduct: (productId: string) => void; // 删除固定产品
+  
+  // 方法：阶段2 - 导演配置
+  updateDirectorSettings: (settings: Partial<DirectorSettings>) => void;
+  
+  // 方法：阶段3 - 脚本创作
   updateScript: (script: Partial<Script>) => void;
-  updateAudio: (audio: Partial<Audio>) => void;
-  updateOverallFeeling: (feeling: Partial<OverallFeeling>) => void;
+  generateScriptWithAI: () => Promise<void>;  // AI导演辅助生成脚本
+  modifyScript: (shotIndex: number, updates: Partial<ScriptShot>) => void;  // 即时修改脚本
   
-  // 业务流程方法
-  submitProductInfo: () => Promise<void>;  // 提交产品信息并生成脚本
-  generateVideoFromScript: () => Promise<void>;  // 根据脚本生成视频
+  // 方法：阶段4 - 生成与交付
+  startRendering: () => Promise<void>;        // 开始渲染
+  pollRenderingStatus: () => Promise<void>;   // 轮询渲染状态
+  cancelRendering: () => void;                // 取消渲染
   
-  // 组装Prompt
-  assemblePrompt: () => void;
-  
-  // 生成视频（保留旧方法兼容）
-  generateVideo: () => Promise<void>;
-  
-  // AI识别产品（已废弃，但保留兼容）
-  recognizeProduct: (imageBase64: string) => Promise<void>;
+  // 导航方法
+  goToStage: (stage: 1 | 2 | 3 | 4) => void;  // 跳转到指定阶段
+  nextStage: () => void;                      // 进入下一阶段
+  prevStage: () => void;                      // 返回上一阶段
 }
 
 export interface Message {
   id: string;
   role: 'ai' | 'user';
   content: string;
-  type?: 'text' | 'scale_selector' | 'script_review';
+  type?: 'text' | 'script_review';
   chips?: { label: string; value: string }[];
 }
 
@@ -156,26 +187,9 @@ export interface ScriptItem {
 
 export type PipelineStage =
   | 'image_uploaded'
-  | 'product_understanding'
-  | 'market_analysis'
-  | 'creative_strategy'
-  | 'style_matching'
   | 'scripts_generated'
   | 'script_selected'
   | 'ready_to_render';
-
-export interface SizeOption {
-  label: string;
-  value: 'mini' | 'normal' | 'large';
-  description?: string;
-}
-
-export interface ProductUnderstanding {
-  productName: string;
-  productType?: string;
-  attributes?: { material?: string; color?: string; shape?: string };
-  sizeOptions?: SizeOption[];
-}
 
 interface ProjectState {
   credits: number;
@@ -185,14 +199,9 @@ interface ProjectState {
   // Canvas State
   uploadedImage: string | null;
   imageBase64: string | null;  // 存储base64编码，避免后端二次下载
-  productScale: 'mini' | 'normal' | 'large' | null;
   productName: string | null;  // 产品名称
   character: any | null;  // 角色信息
   pipelineStage: PipelineStage | null;
-  productUnderstanding: ProductUnderstanding | null;
-  marketAnalysis: any | null;
-  creativeStrategy: any | null;
-  visualStyle: any | null;
   scriptOptions: any[] | null;
   selectedScript: any[] | null;
   
@@ -206,12 +215,7 @@ interface ProjectState {
   setPipelineStage: (stage: PipelineStage | null) => void;
   addMessage: (msg: Omit<Message, 'id'>) => void;
   setUploadedImage: (url: string) => void;
-  setProductScale: (scale: 'mini' | 'normal' | 'large') => void;
   setProductName: (name: string) => void;
-  setProductUnderstanding: (pu: ProductUnderstanding | null) => void;
-  setMarketAnalysis: (ma: any | null) => void;
-  setCreativeStrategy: (cs: any | null) => void;
-  setVisualStyle: (vs: any | null) => void;
   setScriptOptions: (opts: any[] | null) => void;
   setSelectedScript: (script: any[] | null) => void;
   setCharacter: (character: any) => void;
@@ -227,14 +231,9 @@ export const useStore = create<ProjectState>((set) => ({
   
   uploadedImage: null,
   imageBase64: null,
-  productScale: null,
   productName: null,
   character: null,
   pipelineStage: null,
-  productUnderstanding: null,
-  marketAnalysis: null,
-  creativeStrategy: null,
-  visualStyle: null,
   scriptOptions: null,
   selectedScript: null,
   
@@ -242,7 +241,7 @@ export const useStore = create<ProjectState>((set) => ({
     {
       id: 'welcome',
       role: 'ai',
-      content: '系统在线。SoraDirector v3.0 已初始化。请将您的产品图片上传到画布以开始视觉锚定。',
+      content: '系统在线。SoraDirector v3.0 已初始化。请上传您的产品图片开始创作。',
       type: 'text'
     }
   ],
@@ -255,12 +254,7 @@ export const useStore = create<ProjectState>((set) => ({
   })),
 
   setUploadedImage: (url) => set({ uploadedImage: url }),
-  setProductScale: (scale) => set({ productScale: scale }),
   setProductName: (name) => set({ productName: name }),
-  setProductUnderstanding: (pu) => set({ productUnderstanding: pu }),
-  setMarketAnalysis: (ma) => set({ marketAnalysis: ma }),
-  setCreativeStrategy: (cs) => set({ creativeStrategy: cs }),
-  setVisualStyle: (vs) => set({ visualStyle: vs }),
   setScriptOptions: (opts) => set({ scriptOptions: opts }),
   setSelectedScript: (script) => set({ selectedScript: script }),
   setCharacter: (character) => set({ character }),
@@ -274,170 +268,61 @@ export const useStore = create<ProjectState>((set) => ({
 // ===========================
 
 export const useFormStore = create<FormStore>((set, get) => ({
-  // 初始化表单数据（空状态）
+  // 阶段1：商品建模 - 初始状态
   productInfo: {
     productImages: [],
     imagesBase64: [],
     productName: '',
-    usageMedia: {
-      type: null,
-      videoUrl: undefined,
-      imageUrls: [],
-      textDescription: '',
-    },
+    brandName: '',
+    category: '',
+    usageMethod: '',
+    sellingPoints: [],
+    isSaved: false,
   },
+  savedProducts: [],  // 已保存的产品列表
   
-  videoStyle: {
-    styleType: 'realistic',
-    duration: 10,
+  // 阶段2：导演配置 - 默认值
+  directorSettings: {
+    language: 'zh-CN',
+    resolution: '1080p',
+    duration: 15,
     orientation: 'portrait',
-    quality: 'high',
-    customDescription: '',
   },
   
-  scene: {
-    sceneType: 'office',
-    description: '',
-    ambience: {
-      lighting: 'natural',
-      space: 'medium',
-    },
-  },
-  
-  camera: {
-    shotType: 'eye-level',
-    framing: 'medium',
-    movement: 'handheld',
-    depthOfField: 'normal',
-    description: '',
-  },
-  
-  character: {
-    age: 'GenZ',
-    gender: 'Neutral',
-    market: 'China',
-    traits: [],
-    clothing: '',
-    description: '',
-  },
-  
+  // 阶段3：脚本创作 - 空脚本
   script: {
-    shots: [
-      { time: '', scene: '', action: '', audio: '', emotion: '', imageIndex: 0 },
-    ],
+    shots: [],
     emotionArc: {
       start: 'neutral',
       end: 'satisfied',
     },
     mode: 'ai',
     isGenerated: false,
+    aiAssisted: false,
   },
   
-  audio: {
-    backgroundMusic: 'none',
-    ambientSound: '',
-    voiceQuality: 'clear',
-    description: '',
+  // 阶段4：生成与交付 - 空闲状态
+  rendering: {
+    status: 'idle',
+    progress: 0,
+    taskId: null,
+    estimatedTime: 0,
+    videoUrl: null,
   },
   
-  overallFeeling: {
-    vibe: [],
-    goal: '',
-  },
+  // 当前处于阶段1
+  currentStage: 1,
   
-  currentStep: 'upload',
-  assembledPrompt: '',
-  isGenerating: false,
-  generatedVideoUrl: null,
-  
-  // 更新方法
+  // ========================================
+  // 阶段1：商品建模 - 方法
+  // ========================================
   updateProductInfo: (info) => {
     set((state) => ({
       productInfo: { ...state.productInfo, ...info },
     }));
-    get().assemblePrompt();
   },
   
-  updateVideoStyle: (style) => {
-    set((state) => ({
-      videoStyle: { ...state.videoStyle, ...style },
-    }));
-    get().assemblePrompt();
-  },
-  
-  updateScene: (scene) => {
-    set((state) => ({
-      scene: { ...state.scene, ...scene },
-    }));
-    get().assemblePrompt();
-  },
-  
-  updateCamera: (camera) => {
-    set((state) => ({
-      camera: { ...state.camera, ...camera },
-    }));
-    get().assemblePrompt();
-  },
-  
-  updateCharacter: (character) => {
-    set((state) => ({
-      character: { ...state.character, ...character },
-    }));
-    get().assemblePrompt();
-  },
-  
-  updateScript: (script) => {
-    set((state) => ({
-      script: { ...state.script, ...script },
-    }));
-    get().assemblePrompt();
-  },
-  
-  updateAudio: (audio) => {
-    set((state) => ({
-      audio: { ...state.audio, ...audio },
-    }));
-    get().assemblePrompt();
-  },
-  
-  updateOverallFeeling: (feeling) => {
-    set((state) => ({
-      overallFeeling: { ...state.overallFeeling, ...feeling },
-    }));
-    get().assemblePrompt();
-  },
-  
-  // 组装Prompt
-  assemblePrompt: () => {
-    const state = get();
-    const { productInfo, videoStyle, scene, camera, character, script, audio, overallFeeling } = state;
-    
-    const prompt = `Video style: ${videoStyle.customDescription}, ${videoStyle.duration}s, ${videoStyle.orientation}
-
-Scene: ${scene.description}
-
-Camera: ${camera.description}
-
-Tone & pacing: ${script.emotionArc.start} to ${script.emotionArc.end}, conversational, natural pauses, relaxed and friendly
-
-Character: ${character.description}
-
-Spoken script:
-${script.shots.map(s => `${s.time}: ${s.audio}${s.imageIndex !== undefined ? ` [Image ${s.imageIndex + 1}]` : ''}`).join('\n')}
-
-Audio: ${audio.description}
-
-Overall feeling: ${overallFeeling.vibe.join(', ')}, ${overallFeeling.goal}
-
-Product: ${productInfo.productName}
-
-Usage instructions: ${productInfo.usageMedia.textDescription || 'See video/images'}`;
-    
-    set({ assembledPrompt: prompt });
-  },
-  
-  // 提交产品信息并生成脚本
-  submitProductInfo: async () => {
+  saveProduct: async () => {
     const state = get();
     const { productInfo } = state;
     
@@ -446,131 +331,306 @@ Usage instructions: ${productInfo.usageMedia.textDescription || 'See video/image
       alert('请上传5张商品图片');
       return;
     }
-    if (!productInfo.productName) {
-      alert('请填写商品名称');
+    if (!productInfo.productName || !productInfo.usageMethod) {
+      alert('请填写商品名称和使用方式');
       return;
     }
-    if (!productInfo.usageMedia.type) {
-      alert('请上传使用方法视频或图文说明');
+    if (productInfo.sellingPoints.length === 0) {
+      alert('请添加至少一个核心卖点');
       return;
     }
     
-    set({ currentStep: 'script_generating', isGenerating: true });
+    // 生成唯一ID和时间戳
+    const productId = `product_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const savedAt = new Date().toISOString();
+    
+    // 保存产品
+    const savedProduct = {
+      ...productInfo,
+      isSaved: true,
+      savedAt,
+      productId,
+    };
+    
+    set((state) => ({
+      productInfo: savedProduct,
+      savedProducts: [...state.savedProducts, savedProduct],
+    }));
+    
+    // 持久化到localStorage
+    try {
+      const products = [...get().savedProducts];
+      localStorage.setItem('savedProducts', JSON.stringify(products));
+      alert('产品已保存！您可以从侧边栏随时加载');
+    } catch (error) {
+      console.error('保存产品失败:', error);
+      alert('保存失败，请重试');
+    }
+  },
+  
+  loadProduct: (productId) => {
+    const state = get();
+    const product = state.savedProducts.find(p => p.productId === productId);
+    if (product) {
+      set({ productInfo: product });
+      alert(`已加载产品：${product.productName}`);
+    }
+  },
+  
+  deleteProduct: (productId) => {
+    set((state) => ({
+      savedProducts: state.savedProducts.filter(p => p.productId !== productId),
+    }));
+    
+    // 更新localStorage
+    try {
+      const products = get().savedProducts;
+      localStorage.setItem('savedProducts', JSON.stringify(products));
+    } catch (error) {
+      console.error('删除产品失败:', error);
+    }
+  },
+  
+  // ========================================
+  // 阶段2：导演配置 - 方法
+  // ========================================
+  updateDirectorSettings: (settings) => {
+    set((state) => ({
+      directorSettings: { ...state.directorSettings, ...settings },
+    }));
+  },
+  
+  // ========================================
+  // 阶段3：脚本创作 - 方法
+  // ========================================
+  updateScript: (script) => {
+    set((state) => ({
+      script: { 
+        ...state.script, 
+        ...script,
+        lastModified: new Date().toISOString(),
+      },
+    }));
+  },
+  
+  generateScriptWithAI: async () => {
+    const state = get();
+    const { productInfo, directorSettings } = state;
+    
+    // 验证前置条件
+    if (productInfo.productImages.length !== 5) {
+      alert('请先完成商品建模（阶段1）');
+      return;
+    }
+    
+    // 设置渲染状态为生成中
+    set((state) => ({
+      rendering: { ...state.rendering, status: 'rendering', progress: 10 },
+    }));
     
     try {
       const { api } = await import('./api');
       
-      // 调用后端生成脚本
+      // 调用后端AI生成脚本
       const response = await api.generateScriptFromProduct({
         productName: productInfo.productName,
         productImages: productInfo.productImages,
-        usageMedia: productInfo.usageMedia,
+        usageMethod: productInfo.usageMethod,
+        sellingPoints: productInfo.sellingPoints,
+        language: directorSettings.language,
+        duration: directorSettings.duration,
       });
       
-      // 更新脚本数据
+      // 更新脚本
       set((state) => ({
         script: {
           ...state.script,
           shots: response.shots || [],
           isGenerated: true,
+          aiAssisted: true,
+          mode: 'ai',
+          lastModified: new Date().toISOString(),
         },
-        currentStep: 'script_ready',
-        isGenerating: false,
+        rendering: { ...state.rendering, status: 'idle', progress: 0 },
       }));
       
-      // 自动组装Prompt
-      get().assemblePrompt();
+      alert('AI脚本生成成功！您可以在此基础上继续修改');
     } catch (error) {
-      console.error('脚本生成失败:', error);
-      set({ currentStep: 'upload', isGenerating: false });
-      alert('脚本生成失败，请重试');
+      console.error('AI脚本生成失败:', error);
+      set((state) => ({
+        rendering: { ...state.rendering, status: 'failed', progress: 0 },
+      }));
+      alert('AI脚本生成失败，请重试');
     }
   },
   
-  // 根据脚本生成视频
-  generateVideoFromScript: async () => {
+  modifyScript: (shotIndex, updates) => {
+    set((state) => {
+      const newShots = [...state.script.shots];
+      if (shotIndex >= 0 && shotIndex < newShots.length) {
+        newShots[shotIndex] = { ...newShots[shotIndex], ...updates };
+      }
+      return {
+        script: {
+          ...state.script,
+          shots: newShots,
+          lastModified: new Date().toISOString(),
+        },
+      };
+    });
+  },
+  
+  // ========================================
+  // 阶段4：生成与交付 - 方法
+  // ========================================
+  startRendering: async () => {
     const state = get();
+    const { productInfo, directorSettings, script } = state;
     
-    if (!state.script.isGenerated) {
-      alert('请先生成脚本');
+    // 验证前置条件
+    if (!script.isGenerated || script.shots.length === 0) {
+      alert('请先生成脚本（阶段3）');
       return;
     }
     
-    set({ currentStep: 'video_generating', isGenerating: true });
+    // 设置渲染状态
+    set((state) => ({
+      rendering: {
+        ...state.rendering,
+        status: 'rendering',
+        progress: 0,
+        estimatedTime: directorSettings.duration * 10,  // 估计时间
+      },
+    }));
     
     try {
       const { api } = await import('./api');
       
-      // 调用后端生成视频
+      // 组装Prompt
+      const prompt = script.shots.map(s => 
+        `${s.time}: ${s.scene}. ${s.action}. "${s.audio}"`
+      ).join('\n');
+      
+      // 调用视频生成API
       const response = await api.generateVideo(
-        state.assembledPrompt,
-        state.productInfo.productImages,  // 传递5张图片
-        state.videoStyle.orientation,
-        state.videoStyle.quality === 'high' ? 'large' : 'medium',
-        state.videoStyle.duration
+        prompt,
+        productInfo.productImages,
+        directorSettings.orientation,
+        directorSettings.resolution === '1080p' ? 'large' : 'small',
+        directorSettings.duration
       );
       
-      set({
-        generatedVideoUrl: response.url || null,
-        currentStep: 'completed',
-        isGenerating: false,
-      });
+      // 保存任务ID并开始轮询
+      if (response.task_id) {
+        set((state) => ({
+          rendering: { ...state.rendering, taskId: response.task_id },
+        }));
+        get().pollRenderingStatus();
+      } else if (response.url) {
+        // 同步返回，直接完成
+        set((state) => ({
+          rendering: {
+            ...state.rendering,
+            status: 'completed',
+            progress: 100,
+            videoUrl: response.url,
+            estimatedTime: 0,
+          },
+        }));
+      }
     } catch (error) {
-      console.error('视频生成失败:', error);
-      set({ currentStep: 'script_ready', isGenerating: false });
+      console.error('视频渲染失败:', error);
+      set((state) => ({
+        rendering: { ...state.rendering, status: 'failed', progress: 0 },
+      }));
       alert('视频生成失败，请重试');
     }
   },
   
-  // 生成视频
-  generateVideo: async () => {
+  pollRenderingStatus: async () => {
     const state = get();
-    set({ isGenerating: true });
+    const { rendering } = state;
+    
+    if (!rendering.taskId || rendering.status !== 'rendering') {
+      return;
+    }
     
     try {
       const { api } = await import('./api');
+      const response = await api.queryVideoTask(rendering.taskId);
       
-      // 调用后端API
-      const response = await api.generateVideo(
-        state.assembledPrompt,
-        state.productInfo.productImage ? [state.productInfo.productImage] : [],
-        state.videoStyle.orientation,
-        state.videoStyle.quality === 'high' ? 'large' : 'medium',
-        state.videoStyle.duration
-      );
-      
-      set({
-        generatedVideoUrl: response.url || null,
-        isGenerating: false,
-      });
+      if (response.status === 'completed') {
+        set((state) => ({
+          rendering: {
+            ...state.rendering,
+            status: 'completed',
+            progress: 100,
+            videoUrl: response.video_url || response.url,
+            estimatedTime: 0,
+          },
+        }));
+      } else if (response.status === 'failed') {
+        set((state) => ({
+          rendering: { ...state.rendering, status: 'failed', progress: 0 },
+        }));
+      } else {
+        // 更新进度
+        const progress = Math.min(90, rendering.progress + 5);
+        set((state) => ({
+          rendering: { ...state.rendering, progress },
+        }));
+        
+        // 继续轮询
+        setTimeout(() => get().pollRenderingStatus(), 3000);
+      }
     } catch (error) {
-      console.error('视频生成失败:', error);
-      set({ isGenerating: false });
+      console.error('查询渲染状态失败:', error);
+      // 继续重试
+      setTimeout(() => get().pollRenderingStatus(), 5000);
     }
   },
   
-  // AI识别产品
-  recognizeProduct: async (imageBase64: string) => {
-    try {
-      const { api } = await import('./api');
-      const response = await api.understandProduct({ imageBase64 });
-      const pu = response.projectUpdate?.productUnderstanding;
-      
-      if (pu) {
-        set((state) => ({
-          productInfo: {
-            ...state.productInfo,
-            productName: pu.productName || '',
-            productType: pu.productType || '',
-            attributes: pu.attributes || state.productInfo.attributes,
-            negativePrompts: pu.negativePrompts || state.productInfo.negativePrompts,
-            imageBase64,
-          },
-        }));
-        get().assemblePrompt();
-      }
-    } catch (error) {
-      console.error('AI识别失败:', error);
-    }
+  cancelRendering: () => {
+    set((state) => ({
+      rendering: {
+        ...state.rendering,
+        status: 'idle',
+        progress: 0,
+        taskId: null,
+        estimatedTime: 0,
+      },
+    }));
+  },
+  
+  // ========================================
+  // 导航方法
+  // ========================================
+  goToStage: (stage) => {
+    set({ currentStage: stage });
+  },
+  
+  nextStage: () => {
+    set((state) => ({
+      currentStage: Math.min(4, state.currentStage + 1) as 1 | 2 | 3 | 4,
+    }));
+  },
+  
+  prevStage: () => {
+    set((state) => ({
+      currentStage: Math.max(1, state.currentStage - 1) as 1 | 2 | 3 | 4,
+    }));
   },
 }));
+
+// 初始化时从 localStorage 加载已保存的产品
+if (typeof window !== 'undefined') {
+  try {
+    const saved = localStorage.getItem('savedProducts');
+    if (saved) {
+      const products = JSON.parse(saved);
+      useFormStore.setState({ savedProducts: products });
+    }
+  } catch (error) {
+    console.error('加载保存的产品失败:', error);
+  }
+}

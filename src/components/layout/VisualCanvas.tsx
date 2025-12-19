@@ -7,7 +7,7 @@ import { motion } from 'framer-motion';
 import { Button } from '../ui/button';
 
 export function VisualCanvas() {
-  const { uploadedImage, setUploadedImage, productScale, character, script } = useStore();
+  const { uploadedImage, setUploadedImage, character, script } = useStore();
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = React.useState(false);
   const [imageBase64, setImageBase64] = React.useState<string | null>(null);
@@ -96,49 +96,25 @@ export function VisualCanvas() {
               />
               
               {/* HUD Overlays */}
-              {(productScale || character) && (
+              {character && (
                 <div className="absolute inset-0 pointer-events-none">
                    {/* 左侧: 角色卡片 */}
-                   {character && (
-                     <motion.div 
-                       initial={{ opacity: 0, x: -20 }}
-                       animate={{ opacity: 1, x: 0 }}
-                       className="absolute top-8 left-8"
-                     >
-                       <div className="px-3 py-2 bg-cyan-900/30 border border-cyan-500/50 text-cyan-300 rounded text-xs backdrop-blur-md max-w-[200px]">
-                         <div className="font-bold mb-1 flex items-center gap-1">
-                           <Fingerprint size={10} />
-                           角色卡片
-                         </div>
-                         <div className="space-y-0.5 text-[10px] opacity-90">
-                           <div>🌍 {character.market || 'N/A'}</div>
-                           <div>👤 {character.gender || 'N/A'} / {character.age || 'N/A'}</div>
-                           <div>✨ {character.vibe || 'N/A'}</div>
-                         </div>
-                       </div>
-                     </motion.div>
-                   )}
-                   
-                   {/* 右侧: 尺寸锁定 & 物理引擎 */}
                    <motion.div 
-                     initial={{ opacity: 0, scale: 0.9 }}
-                     animate={{ opacity: 1, scale: 1 }}
-                     className="absolute top-8 right-8 flex flex-col items-end gap-2"
+                     initial={{ opacity: 0, x: -20 }}
+                     animate={{ opacity: 1, x: 0 }}
+                     className="absolute top-8 left-8"
                    >
-                     {/* Scale Lock */}
-                     {productScale && (
-                       <div className="flex items-center gap-2 px-3 py-1.5 bg-[#8A2BE2]/20 border border-[#8A2BE2] text-[#8A2BE2] rounded text-xs font-mono font-bold tracking-wider uppercase backdrop-blur-md">
-                          <Lock size={12} />
-                          尺寸锁定: {productScale === 'mini' ? '口红级' : productScale === 'normal' ? '水瓶级' : '大瓶级'}
+                     <div className="px-3 py-2 bg-cyan-900/30 border border-cyan-500/50 text-cyan-300 rounded text-xs backdrop-blur-md max-w-[200px]">
+                       <div className="font-bold mb-1 flex items-center gap-1">
+                         <Fingerprint size={10} />
+                         角色卡片
                        </div>
-                     )}
-                     
-                     {productScale && (
-                       <div className="flex items-center gap-2 px-3 py-1.5 bg-cyan-900/20 border border-cyan-500/50 text-cyan-400 rounded text-xs font-mono font-bold tracking-wider uppercase backdrop-blur-md">
-                          <Fingerprint size={12} />
-                          物理引擎: 强制生效
+                       <div className="space-y-0.5 text-[10px] opacity-90">
+                         <div>🌍 {character.market || 'N/A'}</div>
+                         <div>👤 {character.gender || 'N/A'} / {character.age || 'N/A'}</div>
+                         <div>✨ {character.vibe || 'N/A'}</div>
                        </div>
-                     )}
+                     </div>
                    </motion.div>
                 </div>
               )}
