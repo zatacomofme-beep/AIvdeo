@@ -6,6 +6,7 @@ import uuid
 import asyncio
 import requests
 import base64
+import bcrypt  # 新增：密码加密
 from typing import Any, List, Optional
 from io import BytesIO
 from datetime import datetime
@@ -232,7 +233,30 @@ class GenerateScriptAIRequest(BaseModel):
 # FastAPI 应用初始化
 # ======================
 
-app = FastAPI(title="SoraDirector Backend", version="0.1.0", docs_url=None, redoc_url=None, openapi_url="/openapi.json")
+# 数据库启动事件
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期管理"""
+    # 启动时执行
+    print("\n" + "="*80)
+    print("[DATABASE] 正在初始化数据库连接...")
+    print("="*80)
+    
+    if test_connection():
+        print("[DATABASE] [OK] 数据库连接成功！")
+        print("[DATABASE] 数据将保存到 PostgreSQL")
+    else:
+        print("[DATABASE] [ERROR] 数据库连接失败！")
+        print("[DATABASE] 应用将继续运行，但数据不会持久化")
+    
+    print("="*80 + "\n")
+    yield
+    # 关闭时执行
+    print("[DATABASE] 关闭数据库连接...")
+
+app = FastAPI(title="SoraDirector Backend", version="0.1.0", docs_url=None, redoc_url=None, openapi_url="/openapi.json", lifespan=lifespan)
 
 # CORS：开发阶段先全放开
 app.add_middleware(
@@ -242,23 +266,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# 数据库启动事件
-@app.on_event("startup")
-async def startup_event():
-    """应用启动时连接数据库"""
-    print("\n" + "="*80)
-    print("[DATABASE] 正在初始化数据库连接...")
-    print("="*80)
-    
-    if test_connection():
-        print("[DATABASE] ✓ 数据库连接成功！")
-        print("[DATABASE] 数据将保存到 PostgreSQL")
-    else:
-        print("[DATABASE] ✗ 数据库连接失败！")
-        print("[DATABASE] 应用将继续运行，但数据不会持久化")
-    
-    print("="*80 + "\n")
 
 @app.get("/docs", include_in_schema=False)
 def fallback_docs():
@@ -430,6 +437,28 @@ async def chat_with_ai(prompt: str, system_prompt: Optional[str] = None, image_u
         import traceback
         traceback.print_exc()  # 打印详细堆栈
         return f"抱歉，AI 服务暂时不可用。请稍后再试。"
+
+# ======================
+# 密码加密工具函数
+# ======================
+
+def hash_password(password: str) -> str:
+    """
+    使用 bcrypt 加密密码
+    """
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
+    return hashed.decode('utf-8')
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """
+    验证密码是否正确
+    """
+    try:
+        return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+    except Exception as e:
+        print(f"[密码验证错误] {str(e)}")
+        return False
 
 
 async def generate_video_with_ai(prompt: str, images: Optional[List[str]] = None, orientation: Optional[str] = "portrait", 
@@ -1259,6 +1288,7 @@ async def generate_script_ai(req: GenerateScriptAIRequest):
 
 class CreateCharacterRequest(BaseModel):
     """创建角色请求"""
+    user_id: str  # 新增：用户ID
     name: str
     description: str
     age: Optional[int] = None
@@ -1268,20 +1298,33 @@ class CreateCharacterRequest(BaseModel):
 
 
 @app.post("/create-character")
-async def create_character(req: CreateCharacterRequest):
+async def create_character(req: CreateCharacterRequest, db: Session = Depends(get_db)):
     """
-    创建角色（本地存储，不调用云雾API）
-    前端会把角色信息保存到本地store
+    创建角色（保存到数据库）
     """
     try:
-        import uuid
+        # 生成角色ID
+        character_id = str(uuid.uuid4())
         
-        # 生成本地角色ID
-        character_id = f"char_{uuid.uuid4().hex[:12]}"
-        
+        print(f"[创建角色] 用户ID: {req.user_id}")
         print(f"[创建角色] 角色名称: {req.name}")
         print(f"[创建角色] 角色ID: {character_id}")
         print(f"[创建角色] 描述长度: {len(req.description)} 字")
+        
+        # 保存到数据库
+        new_character = Character(
+            id=character_id,
+            user_id=req.user_id,  # 使用前端传入的user_id
+            name=req.name,
+            description=req.description,
+            age=req.age,
+            gender=req.gender,
+            style=req.style,
+            tags=req.tags
+        )
+        db.add(new_character)
+        db.commit()
+        db.refresh(new_character)
         
         # 返回成功响应
         return {
@@ -1299,6 +1342,7 @@ async def create_character(req: CreateCharacterRequest):
         }
         
     except Exception as e:
+        db.rollback()
         print(f"[创建角色错误] {str(e)}")
         import traceback
         traceback.print_exc()
@@ -1306,117 +1350,327 @@ async def create_character(req: CreateCharacterRequest):
 
 
 # ======================
+# 用户认证 API
+# ======================
+
+class RegisterRequest(BaseModel):
+    """用户注册请求"""
+    email: str
+    password: str
+    username: str
+
+class LoginRequest(BaseModel):
+    """用户登录请求"""
+    email: str
+    password: str
+
+@app.post("/api/register")
+async def register_user(req: RegisterRequest, db: Session = Depends(get_db)):
+    """
+    用户注册
+    """
+    try:
+        # 检查邮箱是否已存在
+        existing_user = db.query(User).filter(User.email == req.email).first()
+        if existing_user:
+            raise HTTPException(status_code=400, detail="该邮箱已注册")
+        
+        # 生成唯一用户ID
+        user_id = str(uuid.uuid4())
+        
+        # 加密密码
+        hashed_password = hash_password(req.password)
+        
+        # 创建新用户
+        new_user = User(
+            id=user_id,
+            email=req.email,
+            username=req.username,
+            password=hashed_password,  # 使用加密后的密码
+            credits=520,  # 新用户赠送520积分
+            role="user",
+            is_active=True
+        )
+        db.add(new_user)
+        
+        # 记录积分历史
+        credit_history = CreditHistory(
+            id=str(uuid.uuid4()),
+            user_id=user_id,
+            action="注册奖励",
+            amount=520,
+            balance_after=520,
+            description="新用户注册赠送520积分"
+        )
+        db.add(credit_history)
+        
+        db.commit()
+        db.refresh(new_user)
+        
+        print(f"[用户注册] 成功 - 用户ID: {user_id}, 邮箱: {req.email}")
+        
+        # 返回用户信息（不包含密码）
+        return {
+            "success": True,
+            "user": {
+                "id": user_id,
+                "email": req.email,
+                "username": req.username,
+                "credits": 520,
+                "role": "user",
+                "createdAt": int(new_user.created_at.timestamp() * 1000) if new_user.created_at else None
+            },
+            "message": "注册成功！获得520积分奖励"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"[用户注册错误] {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"注册失败: {str(e)}")
+
+@app.post("/api/login")
+async def login_user(req: LoginRequest, db: Session = Depends(get_db)):
+    """
+    用户登录
+    """
+    try:
+        # 查找用户
+        user = db.query(User).filter(User.email == req.email).first()
+        if not user:
+            raise HTTPException(status_code=401, detail="邮箱或密码错误")
+        
+        # 验证密码（使用 bcrypt 验证）
+        if not verify_password(req.password, user.password):
+            raise HTTPException(status_code=401, detail="邮箱或密码错误")
+        
+        # 检查用户是否被禁用
+        if not user.is_active:
+            raise HTTPException(status_code=403, detail="账号已被禁用")
+        
+        print(f"[用户登录] 成功 - 用户ID: {user.id}, 邮箱: {user.email}")
+        
+        # 返回用户信息（不包含密码）
+        return {
+            "success": True,
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "username": user.username,
+                "credits": user.credits,
+                "role": user.role,
+                "createdAt": int(user.created_at.timestamp() * 1000) if user.created_at else None
+            },
+            "message": "登录成功"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[用户登录错误] {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"登录失败: {str(e)}")
+
+# ======================
 # 管理员 API
 # ======================
 
-# 模拟数据库（实际应用中应该使用真实数据库）
 ADMIN_USERS = {"admin@soradirector.com"}  # 管理员邮箱列表
-all_users_db = []  # 所有用户
-all_videos_db = []  # 所有视频
-all_prompts_db = []  # 所有提示词
 
 @app.get("/api/public-videos")
-async def get_public_videos():
+async def get_public_videos(db: Session = Depends(get_db)):
     """
     获取所有公开的视频（内容广场）
     """
     try:
-        public_videos = [v for v in all_videos_db if v.get('isPublic', False)]
-        return {"videos": public_videos}
+        public_videos = db.query(Video).filter(Video.is_public == True).all()
+        return {
+            "videos": [
+                {
+                    "id": v.id,
+                    "url": v.video_url,
+                    "thumbnail": v.thumbnail_url,
+                    "script": v.script,
+                    "productName": v.product_name,
+                    "createdAt": v.created_at.timestamp() * 1000 if v.created_at else None,
+                    "status": v.status,
+                    "isPublic": v.is_public
+                }
+                for v in public_videos
+            ]
+        }
     except Exception as e:
         print(f"获取公开视频失败: {e}")
         return {"videos": []}
 
 @app.get("/api/admin/stats")
-async def get_admin_stats():
+async def get_admin_stats(db: Session = Depends(get_db)):
     """
     获取管理员统计数据
     """
     try:
-        total_credits_used = sum(user.get('creditsUsed', 0) for user in all_users_db)
+        total_users = db.query(User).count()
+        total_videos = db.query(Video).count()
+        public_videos = db.query(Video).filter(Video.is_public == True).count()
+        
+        # 计算总消费积分（通过积分历史记录）
+        total_credits_used = db.query(CreditHistory).filter(
+            CreditHistory.amount < 0
+        ).count() * 50  # 假设每次消费50积分
+        
         return {
-            "totalUsers": len(all_users_db),
-            "totalVideos": len(all_videos_db),
-            "publicVideos": len([v for v in all_videos_db if v.get('isPublic', False)]),
-            "totalCreditsUsed": total_credits_used
+            "totalUsers": total_users,
+            "totalVideos": total_videos,
+            "publicVideos": public_videos,
+            "totalCreditsUsed": abs(total_credits_used)
         }
     except Exception as e:
         print(f"获取统计数据失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/admin/users")
-async def get_all_users():
+async def get_all_users(db: Session = Depends(get_db)):
     """
     获取所有用户列表
     """
     try:
-        return {"users": all_users_db}
+        users = db.query(User).all()
+        return {
+            "users": [
+                {
+                    "id": u.id,
+                    "email": u.email,
+                    "username": u.username,
+                    "credits": u.credits,
+                    "role": u.role,
+                    "createdAt": u.created_at.timestamp() * 1000 if u.created_at else None,
+                    "isActive": u.is_active
+                }
+                for u in users
+            ]
+        }
     except Exception as e:
         print(f"获取用户列表失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/admin/videos")
-async def get_all_videos():
+async def get_all_videos(db: Session = Depends(get_db)):
     """
     获取所有视频（包括未公开的）
     """
     try:
-        return {"videos": all_videos_db}
+        videos = db.query(Video).all()
+        return {
+            "videos": [
+                {
+                    "id": v.id,
+                    "userId": v.user_id,
+                    "url": v.video_url,
+                    "thumbnail": v.thumbnail_url,
+                    "script": v.script,
+                    "productName": v.product_name,
+                    "status": v.status,
+                    "isPublic": v.is_public,
+                    "createdAt": v.created_at.timestamp() * 1000 if v.created_at else None
+                }
+                for v in videos
+            ]
+        }
     except Exception as e:
         print(f"获取视频列表失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/admin/prompts")
-async def get_all_prompts():
+async def get_all_prompts(db: Session = Depends(get_db)):
     """
     获取所有提示词
     """
     try:
-        return {"prompts": all_prompts_db}
+        prompts = db.query(SavedPrompt).all()
+        return {
+            "prompts": [
+                {
+                    "id": p.id,
+                    "userId": p.user_id,
+                    "content": p.content,
+                    "productName": p.product_name,
+                    "createdAt": p.created_at.timestamp() * 1000 if p.created_at else None
+                }
+                for p in prompts
+            ]
+        }
     except Exception as e:
         print(f"获取提示词列表失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.put("/api/admin/video/{video_id}/public")
-async def toggle_video_public(video_id: str, isPublic: bool = True):
+async def toggle_video_public(video_id: str, isPublic: bool = True, db: Session = Depends(get_db)):
     """
     切换视频的公开状态
     """
     try:
-        for video in all_videos_db:
-            if video['id'] == video_id:
-                video['isPublic'] = isPublic
-                return {"success": True}
-        raise HTTPException(status_code=404, detail="视频不存在")
+        video = db.query(Video).filter(Video.id == video_id).first()
+        if not video:
+            raise HTTPException(status_code=404, detail="视频不存在")
+        
+        video.is_public = isPublic
+        db.commit()
+        return {"success": True}
     except Exception as e:
+        db.rollback()
         print(f"切换视频公开状态失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/api/admin/video/{video_id}")
-async def delete_video_admin(video_id: str):
+async def delete_video_admin(video_id: str, db: Session = Depends(get_db)):
     """
     删除视频
     """
     try:
-        global all_videos_db
-        all_videos_db = [v for v in all_videos_db if v['id'] != video_id]
+        video = db.query(Video).filter(Video.id == video_id).first()
+        if not video:
+            raise HTTPException(status_code=404, detail="视频不存在")
+        
+        db.delete(video)
+        db.commit()
         return {"success": True}
     except Exception as e:
+        db.rollback()
         print(f"删除视频失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.put("/api/admin/user/{user_id}/credits")
-async def update_user_credits(user_id: str, credits: int):
+async def update_user_credits(user_id: str, credits: int, db: Session = Depends(get_db)):
     """
     更新用户积分
     """
     try:
-        for user in all_users_db:
-            if user['id'] == user_id:
-                user['credits'] = credits
-                return {"success": True}
-        raise HTTPException(status_code=404, detail="用户不存在")
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="用户不存在")
+        
+        old_credits = user.credits
+        user.credits = credits
+        
+        # 记录积分变动
+        credit_history = CreditHistory(
+            id=str(uuid.uuid4()),
+            user_id=user_id,
+            action="管理员调整积分",
+            amount=credits - old_credits,
+            balance_after=credits,
+            description=f"管理员将积分从 {old_credits} 调整为 {credits}"
+        )
+        db.add(credit_history)
+        db.commit()
+        
+        return {"success": True}
     except Exception as e:
+        db.rollback()
         print(f"更新用户积分失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -1424,3 +1678,782 @@ async def update_user_credits(user_id: str, credits: int):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+# ======================
+# 用户项目 API
+# ======================
+
+class CreateProjectRequest(BaseModel):
+    user_id: str
+    product_name: str
+    product_description: Optional[str] = None
+
+class CreateProductRequest(BaseModel):
+    user_id: str
+    name: str
+    description: Optional[str] = None
+    category: Optional[str] = None
+    price: Optional[float] = None
+    images: Optional[List[str]] = None  # 商品图片URL列表
+    specs: Optional[dict] = None  # 商品规格（尺寸、重量等）
+    selling_points: Optional[List[str]] = None  # 卖点
+
+class UpdateProductRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    category: Optional[str] = None
+    price: Optional[float] = None
+    images: Optional[List[str]] = None
+    specs: Optional[dict] = None
+    selling_points: Optional[List[str]] = None
+
+class SaveVideoRequest(BaseModel):
+    user_id: str
+    project_id: Optional[str] = None
+    video_url: str
+    thumbnail_url: Optional[str] = None
+    script: Optional[dict] = None
+    product_name: Optional[str] = None
+    prompt: Optional[str] = None
+    is_public: bool = False
+
+class SavePromptRequest(BaseModel):
+    user_id: str
+    content: str
+    product_name: Optional[str] = None
+
+@app.post("/api/projects")
+async def create_project(req: CreateProjectRequest, db: Session = Depends(get_db)):
+    """
+    创建项目
+    """
+    try:
+        project_id = str(uuid.uuid4())
+        new_project = Project(
+            id=project_id,
+            user_id=req.user_id,
+            product_name=req.product_name,
+            product_description=req.product_description,
+            status='draft'
+        )
+        db.add(new_project)
+        db.commit()
+        db.refresh(new_project)
+        
+        return {
+            "success": True,
+            "project": {
+                "id": new_project.id,
+                "productName": new_project.product_name,
+                "productDescription": new_project.product_description,
+                "status": new_project.status,
+                "createdAt": new_project.created_at.timestamp() * 1000 if new_project.created_at else None
+            }
+        }
+    except Exception as e:
+        db.rollback()
+        print(f"创建项目失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/projects/{user_id}")
+async def get_user_projects(user_id: str, db: Session = Depends(get_db)):
+    """
+    获取用户的所有项目
+    """
+    try:
+        projects = db.query(Project).filter(Project.user_id == user_id).order_by(Project.created_at.desc()).all()
+        return {
+            "projects": [
+                {
+                    "id": p.id,
+                    "productName": p.product_name,
+                    "productDescription": p.product_description,
+                    "status": p.status,
+                    "createdAt": p.created_at.timestamp() * 1000 if p.created_at else None,
+                    "updatedAt": p.updated_at.timestamp() * 1000 if p.updated_at else None
+                }
+                for p in projects
+            ]
+        }
+    except Exception as e:
+        print(f"获取项目列表失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/videos")
+async def save_video(req: SaveVideoRequest, db: Session = Depends(get_db)):
+    """
+    保存视频
+    """
+    try:
+        video_id = str(uuid.uuid4())
+        new_video = Video(
+            id=video_id,
+            user_id=req.user_id,
+            project_id=req.project_id,
+            video_url=req.video_url,
+            thumbnail_url=req.thumbnail_url,
+            script=req.script,
+            product_name=req.product_name,
+            prompt=req.prompt,
+            status='completed',
+            is_public=req.is_public
+        )
+        db.add(new_video)
+        db.commit()
+        db.refresh(new_video)
+        
+        return {
+            "success": True,
+            "video": {
+                "id": new_video.id,
+                "url": new_video.video_url,
+                "thumbnail": new_video.thumbnail_url,
+                "productName": new_video.product_name,
+                "isPublic": new_video.is_public,
+                "createdAt": new_video.created_at.timestamp() * 1000 if new_video.created_at else None
+            }
+        }
+    except Exception as e:
+        db.rollback()
+        print(f"保存视频失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/videos/{user_id}")
+async def get_user_videos(user_id: str, db: Session = Depends(get_db)):
+    """
+    获取用户的所有视频
+    """
+    try:
+        videos = db.query(Video).filter(Video.user_id == user_id).order_by(Video.created_at.desc()).all()
+        return {
+            "videos": [
+                {
+                    "id": v.id,
+                    "url": v.video_url,
+                    "thumbnail": v.thumbnail_url,
+                    "script": v.script,
+                    "productName": v.product_name,
+                    "status": v.status,
+                    "isPublic": v.is_public,
+                    "createdAt": v.created_at.timestamp() * 1000 if v.created_at else None
+                }
+                for v in videos
+            ]
+        }
+    except Exception as e:
+        print(f"获取视频列表失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/videos/{video_id}")
+async def delete_user_video(video_id: str, db: Session = Depends(get_db)):
+    """
+    删除用户视频
+    """
+    try:
+        video = db.query(Video).filter(Video.id == video_id).first()
+        if not video:
+            raise HTTPException(status_code=404, detail="视频不存在")
+        
+        db.delete(video)
+        db.commit()
+        return {"success": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"删除视频失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/prompts")
+async def save_prompt(req: SavePromptRequest, db: Session = Depends(get_db)):
+    """
+    保存提示词
+    """
+    try:
+        prompt_id = str(uuid.uuid4())
+        new_prompt = SavedPrompt(
+            id=prompt_id,
+            user_id=req.user_id,
+            content=req.content,
+            product_name=req.product_name
+        )
+        db.add(new_prompt)
+        db.commit()
+        db.refresh(new_prompt)
+        
+        return {
+            "success": True,
+            "prompt": {
+                "id": new_prompt.id,
+                "content": new_prompt.content,
+                "productName": new_prompt.product_name,
+                "createdAt": new_prompt.created_at.timestamp() * 1000 if new_prompt.created_at else None
+            }
+        }
+    except Exception as e:
+        db.rollback()
+        print(f"保存提示词失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/prompts/{user_id}")
+async def get_user_prompts(user_id: str, db: Session = Depends(get_db)):
+    """
+    获取用户的所有提示词
+    """
+    try:
+        prompts = db.query(SavedPrompt).filter(SavedPrompt.user_id == user_id).order_by(SavedPrompt.created_at.desc()).all()
+        return {
+            "prompts": [
+                {
+                    "id": p.id,
+                    "content": p.content,
+                    "productName": p.product_name,
+                    "createdAt": p.created_at.timestamp() * 1000 if p.created_at else None
+                }
+                for p in prompts
+            ]
+        }
+    except Exception as e:
+        print(f"获取提示词列表失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/prompts/{prompt_id}")
+async def delete_prompt(prompt_id: str, db: Session = Depends(get_db)):
+    """
+    删除提示词
+    """
+    try:
+        prompt = db.query(SavedPrompt).filter(SavedPrompt.id == prompt_id).first()
+        if not prompt:
+            raise HTTPException(status_code=404, detail="提示词不存在")
+        
+        db.delete(prompt)
+        db.commit()
+        return {"success": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"删除提示词失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ======================
+# 积分管理 API
+# ======================
+
+class ConsumeCreditsRequest(BaseModel):
+    """消费积分请求"""
+    user_id: str
+    amount: int
+    action: str  # 消费类型：生成视频、生成脚本等
+    description: Optional[str] = None
+
+class RechargeCreditsRequest(BaseModel):
+    """充值积分请求"""
+    user_id: str
+    amount: int  # 充值金额（元）
+    credits: int  # 获得积分
+    payment_method: str  # 支付方式：微信、支付宝等
+    order_id: Optional[str] = None  # 订单ID（支付成功后由支付系统返回）
+
+@app.post("/api/credits/consume")
+async def consume_credits(req: ConsumeCreditsRequest, db: Session = Depends(get_db)):
+    """
+    消费积分
+    用于生成视频、生成脚本等功能的积分扣除
+    """
+    try:
+        # 查找用户
+        user = db.query(User).filter(User.id == req.user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="用户不存在")
+        
+        # 检查积分是否足够
+        if user.credits < req.amount:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"积分不足！当前积分：{user.credits}，需要：{req.amount}"
+            )
+        
+        # 更新用户积分
+        old_credits = user.credits
+        user.credits -= req.amount
+        
+        # 记录积分历史
+        credit_history = CreditHistory(
+            id=str(uuid.uuid4()),
+            user_id=req.user_id,
+            action=req.action,
+            amount=-req.amount,  # 负数表示消费
+            balance_after=user.credits,
+            description=req.description or f"{req.action} 消耗 {req.amount} 积分"
+        )
+        db.add(credit_history)
+        db.commit()
+        
+        print(f"[积分消费] 用户ID: {req.user_id}, 消耗: {req.amount}, 余额: {old_credits} -> {user.credits}")
+        
+        return {
+            "success": True,
+            "credits": user.credits,
+            "consumed": req.amount,
+            "message": f"消费 {req.amount} 积分成功，剩余 {user.credits} 积分"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"[积分消费错误] {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"消费积分失败: {str(e)}")
+
+@app.post("/api/credits/recharge")
+async def recharge_credits(req: RechargeCreditsRequest, db: Session = Depends(get_db)):
+    """
+    充值积分
+    用户通过微信、支付宝等方式购买积分
+    """
+    try:
+        # 查找用户
+        user = db.query(User).filter(User.id == req.user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="用户不存在")
+        
+        # 更新用户积分
+        old_credits = user.credits
+        user.credits += req.credits
+        
+        # 记录积分历史
+        credit_history = CreditHistory(
+            id=str(uuid.uuid4()),
+            user_id=req.user_id,
+            action=f"充值（{req.payment_method}）",
+            amount=req.credits,  # 正数表示增加
+            balance_after=user.credits,
+            description=f"支付 {req.amount} 元，获得 {req.credits} 积分" + (f"，订单号: {req.order_id}" if req.order_id else "")
+        )
+        db.add(credit_history)
+        db.commit()
+        
+        print(f"[积分充值] 用户ID: {req.user_id}, 充值: {req.credits}, 余额: {old_credits} -> {user.credits}")
+        
+        return {
+            "success": True,
+            "credits": user.credits,
+            "recharged": req.credits,
+            "amount": req.amount,
+            "message": f"充值成功！获得 {req.credits} 积分，当前余额 {user.credits} 积分"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"[积分充值错误] {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"充值失败: {str(e)}")
+
+@app.get("/api/credits/balance/{user_id}")
+async def get_credits_balance(user_id: str, db: Session = Depends(get_db)):
+    """
+    获取用户积分余额
+    """
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="用户不存在")
+        
+        return {
+            "success": True,
+            "user_id": user.id,
+            "credits": user.credits,
+            "username": user.username,
+            "email": user.email
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"获取积分余额失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/user/{user_id}")
+async def get_user_info(user_id: str, db: Session = Depends(get_db)):
+    """
+    获取用户信息
+    """
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="用户不存在")
+        
+        return {
+            "id": user.id,
+            "email": user.email,
+            "username": user.username,
+            "credits": user.credits,
+            "role": user.role,
+            "isActive": user.is_active,
+            "createdAt": user.created_at.timestamp() * 1000 if user.created_at else None
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"获取用户信息失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/credits/consume")
+async def consume_credits(user_id: str, amount: int, action: str, description: Optional[str] = None, db: Session = Depends(get_db)):
+    """
+    消费积分
+    """
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="用户不存在")
+        
+        if user.credits < amount:
+            raise HTTPException(status_code=400, detail="积分不足")
+        
+        # 更新积分
+        user.credits -= amount
+        
+        # 记录积分历史
+        credit_history = CreditHistory(
+            id=str(uuid.uuid4()),
+            user_id=user_id,
+            action=action,
+            amount=-amount,
+            balance_after=user.credits,
+            description=description or f"{action} 消耗 {amount} 积分"
+        )
+        db.add(credit_history)
+        db.commit()
+        
+        return {
+            "success": True,
+            "credits": user.credits
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"消费积分失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/credits/history/{user_id}")
+async def get_credit_history(user_id: str, db: Session = Depends(get_db)):
+    """
+    获取积分历史
+    """
+    try:
+        history = db.query(CreditHistory).filter(CreditHistory.user_id == user_id).order_by(CreditHistory.created_at.desc()).all()
+        return {
+            "history": [
+                {
+                    "id": h.id,
+                    "action": h.action,
+                    "amount": h.amount,
+                    "balanceAfter": h.balance_after,
+                    "description": h.description,
+                    "createdAt": h.created_at.timestamp() * 1000 if h.created_at else None
+                }
+                for h in history
+            ]
+        }
+    except Exception as e:
+        print(f"获取积分历史失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/characters/{user_id}")
+async def get_user_characters(user_id: str, db: Session = Depends(get_db)):
+    """
+    获取用户的所有角色
+    """
+    try:
+        characters = db.query(Character).filter(Character.user_id == user_id).order_by(Character.created_at.desc()).all()
+        return {
+            "characters": [
+                {
+                    "id": c.id,
+                    "name": c.name,
+                    "description": c.description,
+                    "age": c.age,
+                    "gender": c.gender,
+                    "style": c.style,
+                    "tags": c.tags,
+                    "createdAt": c.created_at.timestamp() * 1000 if c.created_at else None
+                }
+                for c in characters
+            ]
+        }
+    except Exception as e:
+        print(f"获取角色列表失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ======================
+# 商品管理 API
+# ======================
+
+@app.post("/api/products")
+async def create_product(req: CreateProductRequest, db: Session = Depends(get_db)):
+    """
+    创建商品
+    """
+    try:
+        product_id = str(uuid.uuid4())
+        new_product = Product(
+            id=product_id,
+            user_id=req.user_id,
+            name=req.name,
+            description=req.description,
+            category=req.category,
+            price=req.price,
+            images=req.images,
+            specs=req.specs,
+            selling_points=req.selling_points
+        )
+        db.add(new_product)
+        db.commit()
+        db.refresh(new_product)
+        
+        return {
+            "success": True,
+            "product": {
+                "id": new_product.id,
+                "name": new_product.name,
+                "description": new_product.description,
+                "category": new_product.category,
+                "price": new_product.price,
+                "images": new_product.images,
+                "specs": new_product.specs,
+                "sellingPoints": new_product.selling_points,
+                "createdAt": new_product.created_at.timestamp() * 1000 if new_product.created_at else None
+            }
+        }
+    except Exception as e:
+        db.rollback()
+        print(f"创建商品失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/products/{user_id}")
+async def get_user_products(user_id: str, db: Session = Depends(get_db)):
+    """
+    获取用户的所有商品
+    """
+    try:
+        products = db.query(Product).filter(Product.user_id == user_id).order_by(Product.created_at.desc()).all()
+        return {
+            "products": [
+                {
+                    "id": p.id,
+                    "name": p.name,
+                    "description": p.description,
+                    "category": p.category,
+                    "price": p.price,
+                    "images": p.images,
+                    "specs": p.specs,
+                    "sellingPoints": p.selling_points,
+                    "createdAt": p.created_at.timestamp() * 1000 if p.created_at else None,
+                    "updatedAt": p.updated_at.timestamp() * 1000 if p.updated_at else None
+                }
+                for p in products
+            ]
+        }
+    except Exception as e:
+        print(f"获取商品列表失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/product/{product_id}")
+async def get_product_detail(product_id: str, db: Session = Depends(get_db)):
+    """
+    获取单个商品详情
+    """
+    try:
+        product = db.query(Product).filter(Product.id == product_id).first()
+        if not product:
+            raise HTTPException(status_code=404, detail="商品不存在")
+        
+        return {
+            "id": product.id,
+            "name": product.name,
+            "description": product.description,
+            "category": product.category,
+            "price": product.price,
+            "images": product.images,
+            "specs": product.specs,
+            "sellingPoints": product.selling_points,
+            "createdAt": product.created_at.timestamp() * 1000 if product.created_at else None,
+            "updatedAt": product.updated_at.timestamp() * 1000 if product.updated_at else None
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"获取商品详情失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/product/{product_id}")
+async def update_product(product_id: str, req: UpdateProductRequest, db: Session = Depends(get_db)):
+    """
+    更新商品信息
+    """
+    try:
+        product = db.query(Product).filter(Product.id == product_id).first()
+        if not product:
+            raise HTTPException(status_code=404, detail="商品不存在")
+        
+        # 更新字段
+        if req.name is not None:
+            product.name = req.name
+        if req.description is not None:
+            product.description = req.description
+        if req.category is not None:
+            product.category = req.category
+        if req.price is not None:
+            product.price = req.price
+        if req.images is not None:
+            product.images = req.images
+        if req.specs is not None:
+            product.specs = req.specs
+        if req.selling_points is not None:
+            product.selling_points = req.selling_points
+        
+        db.commit()
+        db.refresh(product)
+        
+        return {
+            "success": True,
+            "product": {
+                "id": product.id,
+                "name": product.name,
+                "description": product.description,
+                "category": product.category,
+                "price": product.price,
+                "images": product.images,
+                "specs": product.specs,
+                "sellingPoints": product.selling_points,
+                "updatedAt": product.updated_at.timestamp() * 1000 if product.updated_at else None
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"更新商品失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/product/{product_id}")
+async def delete_product(product_id: str, db: Session = Depends(get_db)):
+    """
+    删除商品
+    """
+    try:
+        product = db.query(Product).filter(Product.id == product_id).first()
+        if not product:
+            raise HTTPException(status_code=404, detail="商品不存在")
+        
+        db.delete(product)
+        db.commit()
+        return {"success": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"删除商品失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ======================
+# 用户认证 API
+# ======================
+
+class UserRegisterRequest(BaseModel):
+    email: str
+    username: str
+    password: str
+
+class UserLoginRequest(BaseModel):
+    email: str
+    password: str
+
+@app.post("/api/register")
+async def register_user(req: UserRegisterRequest, db: Session = Depends(get_db)):
+    """
+    用户注册
+    """
+    try:
+        # 检查用户是否已存在
+        existing_user = db.query(User).filter(User.email == req.email).first()
+        if existing_user:
+            raise HTTPException(status_code=400, detail="邮箱已被注册")
+        
+        # 创建新用户
+        new_user = User(
+            id=str(uuid.uuid4()),
+            email=req.email,
+            username=req.username,
+            password_hash=req.password,  # 实际应用中应该加密
+            credits=520,  # 初始积分
+            role='user'
+        )
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
+        
+        return {
+            "success": True,
+            "user": {
+                "id": new_user.id,
+                "email": new_user.email,
+                "username": new_user.username,
+                "credits": new_user.credits,
+                "role": new_user.role,
+                "createdAt": new_user.created_at.timestamp() * 1000 if new_user.created_at else None
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"用户注册失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/login")
+async def login_user(req: UserLoginRequest, db: Session = Depends(get_db)):
+    """
+    用户登录
+    """
+    try:
+        # 查找用户
+        user = db.query(User).filter(User.email == req.email).first()
+        if not user:
+            raise HTTPException(status_code=401, detail="邮箱或密码错误")
+        
+        # 验证密码（实际应用中应该使用加密验证）
+        if user.password_hash != req.password:
+            raise HTTPException(status_code=401, detail="邮箱或密码错误")
+        
+        # 更新最后登录时间
+        user.last_login = datetime.utcnow()
+        db.commit()
+        
+        return {
+            "success": True,
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "username": user.username,
+                "credits": user.credits,
+                "role": user.role,
+                "createdAt": user.created_at.timestamp() * 1000 if user.created_at else None
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"用户登录失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

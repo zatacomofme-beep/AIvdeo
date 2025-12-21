@@ -14,6 +14,8 @@ import { MyCharacters } from './components/assets/MyCharacters';
 import { ContentSquare } from './components/ContentSquare';
 import { AdminPanel } from './components/AdminPanel';  // 新增：管理员面板
 import { useStore } from './lib/store';
+import { useAuthStore } from '../lib/store';  // 新增：导入 useAuthStore
+import { api } from '../lib/api';  // 导入 api
 
 export default function App() {
   const [activeTab, setActiveTab] = React.useState('video');
@@ -21,48 +23,44 @@ export default function App() {
   const [showUserCenter, setShowUserCenter] = React.useState(false);
   const [showRecharge, setShowRecharge] = React.useState(false);
   
-  const { login, register, logout, addCredits } = useStore();
+  const { login, register, logout, addCredits } = useAuthStore();  // 使用 useAuthStore
 
   const handleLogin = async (email: string, password: string) => {
-    // TODO: 调用后端API进行登录验证
-    // 这里是模拟登录
-    
-    // ✅ 管理员测试账号
-    const isAdmin = email === 'admin@soradirector.com';
-    
-    const mockUser = {
-      id: Date.now().toString(),
-      email,
-      username: email.split('@')[0],
-      createdAt: Date.now(),
-      role: isAdmin ? 'admin' as const : 'user' as const  // 设置角色
-    };
-    
-    login(mockUser);
-    setShowLogin(false);
-    
-    if (isAdmin) {
-      alert('✅ 管理员登录成功！\n\n您现在可以访问：\n• 管理员控制台（侧边栏）\n• 用户管理\n• 视频审核\n• 提示词管理');
-    } else {
-      alert('✅ 登录成功！');
+    try {
+      // 调用后端 API 进行登录
+      const response = await api.login({ email, password });
+      
+      // 登录成功，保存用户信息到 store
+      login(response.user);
+      setShowLogin(false);
+      
+      if (response.user.role === 'admin') {
+        alert('✅ 管理员登录成功！\n\n您现在可以访问：\n• 管理员控制台（侧边栏）\n• 用户管理\n• 视频审核\n• 提示词管理');
+      } else {
+        alert(`✅ 登录成功！\n\n欢迎回来，${response.user.username}！\n当前积分：${response.user.credits}`);
+      }
+    } catch (error) {
+      alert(`❌ 登录失败\n\n${error instanceof Error ? error.message : '请稍后重试'}`);
     }
   };
 
   const handleRegister = async (email: string, password: string, username: string) => {
-    // TODO: 调用后端API进行注册
-    // 这里是模拟注册
-    const mockUser = {
-      id: Date.now().toString(),
-      email,
-      username,
-      createdAt: Date.now()
-    };
-    
-    register(mockUser);
-    // 新用户赠送100 Credits
-    addCredits(100);
-    setShowLogin(false);
-    alert('✅ 注册成功！获得新用户奖励 100 Credits');
+    try {
+      // 调用后端 API 进行注册
+      const response = await api.register({ email, password, username });
+      
+      // 注册成功，保存用户信息到 store
+      register(response.user);
+      setShowLogin(false);
+      
+      alert(`✅ 注册成功！
+
+${response.message}
+用户ID：${response.user.id}
+初始积分：${response.user.credits}`);
+    } catch (error) {
+      alert(`❌ 注册失败\n\n${error instanceof Error ? error.message : '请稍后重试'}`);
+    }
   };
 
   const handleLogout = () => {

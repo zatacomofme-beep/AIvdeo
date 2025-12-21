@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { create } from 'zustand';
 
 // ===========================
 // 新的表单数据结构
@@ -122,6 +123,100 @@ export interface RenderingStatus {
   taskId: string | null;   // 任务ID
   estimatedTime: number;   // 预计剩余时间（秒）
   videoUrl: string | null; // 生成的视频URL
+}
+
+// ===========================
+// 用户认证状态
+// ===========================
+export interface User {
+  id: string;
+  email: string;
+  username: string;
+  credits?: number;
+  role?: 'user' | 'admin';
+  createdAt: number;
+}
+
+interface AuthState {
+  currentUser: User | null;
+  isLoggedIn: boolean;
+  
+  login: (user: User) => void;
+  register: (user: User) => void;
+  logout: () => void;
+  updateUser: (updates: Partial<User>) => void;
+  addCredits: (amount: number) => void;
+}
+
+// 用户认证 Store
+export const useAuthStore = create<AuthState>((set) => ({
+  currentUser: null,
+  isLoggedIn: false,
+  
+  login: (user) => {
+    set({ currentUser: user, isLoggedIn: true });
+    // 保存到 localStorage
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('currentUser', JSON.stringify(user));
+    }
+  },
+  
+  register: (user) => {
+    const newUser = { ...user, credits: 520 }; // 初始积分
+    set({ currentUser: newUser, isLoggedIn: true });
+    // 保存到 localStorage
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('currentUser', JSON.stringify(newUser));
+    }
+  },
+  
+  logout: () => {
+    set({ currentUser: null, isLoggedIn: false });
+    // 清除 localStorage
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('currentUser');
+    }
+  },
+  
+  updateUser: (updates) => {
+    set((state) => {
+      if (!state.currentUser) return state;
+      const updatedUser = { ...state.currentUser, ...updates };
+      // 更新 localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+      }
+      return { currentUser: updatedUser };
+    });
+  },
+  
+  addCredits: (amount) => {
+    set((state) => {
+      if (!state.currentUser) return state;
+      const updatedUser = {
+        ...state.currentUser,
+        credits: (state.currentUser.credits || 0) + amount
+      };
+      // 更新 localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+      }
+      return { currentUser: updatedUser };
+    });
+  }
+}));
+
+// 初始化时从 localStorage 加载用户信息
+if (typeof window !== 'undefined') {
+  try {
+    const savedUser = localStorage.getItem('currentUser');
+    if (savedUser) {
+      const user = JSON.parse(savedUser);
+      useAuthStore.setState({ currentUser: user, isLoggedIn: true });
+    }
+  } catch (error) {
+    console.error('加载用户信息失败:', error);
+  }
 }
 
 // ===========================

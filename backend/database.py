@@ -256,10 +256,10 @@ def test_connection():
         with engine.connect() as conn:
             result = conn.execute(text("SELECT 1"))
             result.fetchone()
-        print("[DATABASE] ✓ 数据库连接成功！")
+        print("[DATABASE] [OK] 数据库连接成功！")
         return True
     except Exception as e:
-        print(f"[DATABASE] ✗ 数据库连接失败: {e}")
+        print(f"[DATABASE] [ERROR] 数据库连接失败: {e}")
         return False
 
 

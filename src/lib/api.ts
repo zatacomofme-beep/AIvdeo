@@ -247,5 +247,296 @@ export const api = {
       console.error('脚本生成失败:', error);
       throw error;
     }
+  },
+
+  /**
+   * 使用AI生成角色信息（不保存到数据库）
+   */
+  async generateCharacter(params: {
+    country?: string;
+    ethnicity?: string;
+    age?: number;
+    gender?: string;
+  }): Promise<{
+    id: string;
+    name: string;
+    description: string;
+    age?: number;
+    gender?: string;
+    ethnicity?: string;
+    country?: string;
+  }> {
+    console.log('[API] 调用AI生成角色...');
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/generate-character`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(params),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'AI生成角色失败');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('AI生成角色失败:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * 创建角色（保存到数据库）
+   */
+  async createCharacter(params: {
+    user_id: string;
+    name: string;
+    description: string;
+    age?: number;
+    gender?: string;
+    style?: string;
+    tags?: string[];
+  }): Promise<{
+    success: boolean;
+    character_id: string;
+    data: any;
+  }> {
+    console.log('[API] 保存角色到数据库...');
+    try {
+      const response = await fetch(`${API_BASE_URL}/create-character`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(params),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || '创建角色失败');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('创建角色失败:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * 用户注册
+   */
+  async register(params: {
+    email: string;
+    password: string;
+    username: string;
+  }): Promise<{
+    success: boolean;
+    user: {
+      id: string;
+      email: string;
+      username: string;
+      credits: number;
+      role: 'user' | 'admin';  // 修复类型
+      createdAt: number;
+    };
+    message: string;
+  }> {
+    console.log('[API] 用户注册...');
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(params),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || '注册失败');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('注册失败:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * 用户登录
+   */
+  async login(params: {
+    email: string;
+    password: string;
+  }): Promise<{
+    success: boolean;
+    user: {
+      id: string;
+      email: string;
+      username: string;
+      credits: number;
+      role: 'user' | 'admin';  // 修复类型
+      createdAt: number;
+    };
+    message: string;
+  }> {
+    console.log('[API] 用户登录...');
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(params),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || '登录失败');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('登录失败:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * 消费积分
+   */
+  async consumeCredits(params: {
+    user_id: string;
+    amount: number;
+    action: string;
+    description?: string;
+  }): Promise<{
+    success: boolean;
+    credits: number;
+    consumed: number;
+    message: string;
+  }> {
+    console.log('[API] 消费积分...');
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/credits/consume`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(params),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || '消费积分失败');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('消费积分失败:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * 充值积分
+   */
+  async rechargeCredits(params: {
+    user_id: string;
+    amount: number;  // 支付金额（元）
+    credits: number;  // 获得积分
+    payment_method: string;  // 支付方式
+    order_id?: string;  // 订单ID
+  }): Promise<{
+    success: boolean;
+    credits: number;
+    recharged: number;
+    amount: number;
+    message: string;
+  }> {
+    console.log('[API] 充值积分...');
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/credits/recharge`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(params),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || '充值失败');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('充值失败:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * 获取积分余额
+   */
+  async getCreditsBalance(user_id: string): Promise<{
+    success: boolean;
+    user_id: string;
+    credits: number;
+    username: string;
+    email: string;
+  }> {
+    console.log('[API] 获取积分余额...');
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/credits/balance/${user_id}`, {
+        method: 'GET',
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || '获取余额失败');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('获取余额失败:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * 获取积分历史
+   */
+  async getCreditsHistory(user_id: string): Promise<{
+    history: Array<{
+      id: string;
+      action: string;
+      amount: number;
+      balanceAfter: number;
+      description: string;
+      createdAt: number;
+    }>;
+  }> {
+    console.log('[API] 获取积分历史...');
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/credits/history/${user_id}`, {
+        method: 'GET',
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || '获取历史失败');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('获取历史失败:', error);
+      throw error;
+    }
   }
 };

@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { Users, Plus, Trash2, Clock, Edit, X, Wand2, Loader2 } from 'lucide-react';
 import { useStore } from '../../lib/store';
+import { useAuthStore } from '../../../lib/store';  // 新增：导入 useAuthStore
 import { cn } from '../../lib/utils';
 const API_BASE_URL = 'http://115.190.137.87:8000';
 
 export function MyCharacters() {
   const { myCharacters, addCharacter, deleteCharacter } = useStore();
+  const { currentUser, isLoggedIn } = useAuthStore();  // 获取当前用户
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [formData, setFormData] = useState({
@@ -95,17 +97,27 @@ export function MyCharacters() {
       return;
     }
 
+    // 检查是否登录
+    if (!isLoggedIn || !currentUser) {
+      alert('请先登录后再创建角色！');
+      return;
+    }
+
     // 开始创建，显示加载状态
     setIsGeneratingAI(true);
     
     try {
-      // 调用后端API创建Sora2角色
+      // 使用当前登录用户的ID
+      const currentUserId = currentUser.id;
+      
+      // 调用后端API创建角色（保存到数据库）
       const response = await fetch(`${API_BASE_URL}/create-character`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          user_id: currentUserId,  // 使用真实的用户ID
           name: formData.name,
           description: formData.description,
           age: formData.age ? parseInt(formData.age) : undefined,
@@ -132,7 +144,7 @@ export function MyCharacters() {
         gender: formData.gender || undefined,
         style: formData.style || undefined,
         tags: formData.tags ? formData.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
-        characterId: result.character_id // 保存Sora角色ID
+        characterId: result.character_id // 保存角色ID
       });
 
       setFormData({
@@ -148,7 +160,7 @@ export function MyCharacters() {
       setShowCreateModal(false);
       
       // 显示成功提示
-      alert(`✅ 角色创建成功！\n\n角色ID: ${result.character_id}`);
+      alert(`✅ 角色创建成功！\n\n角色ID: ${result.character_id}\n用户ID: ${currentUserId}`);
       
     } catch (error) {
       console.error('创建角色失败:', error);
