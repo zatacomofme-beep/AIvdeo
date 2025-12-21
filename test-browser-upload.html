@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>浏览器上传测试</title>
+</head>
+<body>
+    <h1>测试文件上传 - 详细调试</h1>
+    <input type="file" id="fileInput" accept="image/*">
+    <button onclick="testUpload()">测试上传</button>
+    <div id="log" style="margin-top:20px; font-family:monospace; white-space:pre-wrap;"></div>
+
+    <script>
+        function log(msg) {
+            const logDiv = document.getElementById('log');
+            logDiv.innerHTML += msg + '\n';
+            console.log(msg);
+        }
+
+        async function testUpload() {
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                alert('请先选择文件');
+                return;
+            }
+
+            log('='.repeat(60));
+            log('开始测试上传');
+            log('文件信息:');
+            log(`  名称: ${file.name}`);
+            log(`  类型: ${file.type}`);
+            log(`  大小: ${file.size} bytes`);
+            log('');
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            log('FormData内容:');
+            for (let [key, value] of formData.entries()) {
+                if (value instanceof File) {
+                    log(`  ${key}: File(${value.name}, ${value.type}, ${value.size} bytes)`);
+                } else {
+                    log(`  ${key}: ${value}`);
+                }
+            }
+            log('');
+
+            const url = 'http://115.190.137.87:8000/api/upload-image';
+            log(`请求URL: ${url}`);
+            log('');
+
+            try {
+                log('发送POST请求...');
+                const startTime = Date.now();
+                
+                const response = await fetch(url, {
+                    method: 'POST',
+                    body: formData,
+                    // 不设置Content-Type，让浏览器自动设置boundary
+                });
+                
+                const duration = Date.now() - startTime;
+                log(`请求耗时: ${duration}ms`);
+                log('');
+
+                log(`响应状态: ${response.status} ${response.statusText}`);
+                log('响应头:');
+                for (let [key, value] of response.headers.entries()) {
+                    log(`  ${key}: ${value}`);
+                }
+                log('');
+
+                const responseText = await response.text();
+                log('响应内容:');
+                log(responseText);
+                log('');
+
+                if (response.ok) {
+                    const data = JSON.parse(responseText);
+                    log('✅ 上传成功!');
+                    log(`URL: ${data.url}`);
+                    if (data.size) {
+                        log(`文件大小: ${data.size} bytes`);
+                    }
+                } else {
+                    log('❌ 上传失败!');
+                    try {
+                        const error = JSON.parse(responseText);
+                        log('错误详情:');
+                        log(JSON.stringify(error, null, 2));
+                    } catch (e) {
+                        log('无法解析错误响应');
+                    }
+                }
+            } catch (error) {
+                log('❌ 请求异常:');
+                log(`错误类型: ${error.constructor.name}`);
+                log(`错误消息: ${error.message}`);
+                log(`错误堆栈: ${error.stack}`);
+            }
+
+            log('='.repeat(60));
+        }
+    </script>
+</body>
+</html>

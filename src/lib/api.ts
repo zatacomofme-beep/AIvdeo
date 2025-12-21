@@ -1,7 +1,7 @@
 import { Message, ScriptItem } from './store';
 
-// 后端 API 基础 URL - 根据实际部署修改
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+// 后端API基础URL - 直接连接远程服务器
+const API_BASE_URL = 'http://115.190.137.87:8000';
 
 // 定义与后端交互的数据类型
 export interface ApiResponse<T> {
@@ -28,25 +28,52 @@ export const api = {
    */
   async uploadImage(file: File): Promise<string> {
     console.log('[API] Uploading image to backend...');
+    console.log('[API] File details:', {
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      lastModified: file.lastModified
+    });
+    console.log('[API] Target URL:', `${API_BASE_URL}/api/upload-image`);
     
     const formData = new FormData();
     formData.append('file', file);
+    
+    // 打印FormData内容（调试用）
+    console.log('[API] FormData entries:');
+    for (let pair of formData.entries()) {
+      console.log('  ', pair[0], ':', pair[1]);
+    }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/upload-image`, {
+      console.log('[API] Sending POST request...');
+      const response = await fetch(`${API_BASE_URL}/api/upload-image`, {
         method: 'POST',
         body: formData,
       });
+      
+      console.log('[API] Response status:', response.status);
+      console.log('[API] Response headers:', Object.fromEntries(response.headers.entries()));
 
       if (!response.ok) {
-        const error = await response.json();
+        const errorText = await response.text();
+        console.error('[API] Error response:', errorText);
+        let error;
+        try {
+          error = JSON.parse(errorText);
+        } catch {
+          error = { detail: errorText };
+        }
         throw new Error(error.detail || '上传失败');
       }
 
       const data = await response.json();
+      console.log('[API] Upload success, URL:', data.url);
       return data.url;
     } catch (error) {
-      console.error('上传失败:', error);
+      console.error('[API] Upload failed:', error);
+      console.error('[API] Error type:', error instanceof Error ? error.constructor.name : typeof error);
+      console.error('[API] Error message:', error instanceof Error ? error.message : String(error));
       throw error;
     }
   },

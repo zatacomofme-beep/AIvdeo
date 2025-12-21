@@ -18,6 +18,19 @@ from pydantic import BaseModel
 from openai import OpenAI
 from dotenv import load_dotenv
 
+# 导入prompt配置
+from prompts import (
+    CHARACTER_GENERATION_SYSTEM_PROMPT,
+    get_character_generation_prompt,
+    SCRIPT_GENERATION_SYSTEM_PROMPT,
+    get_script_generation_prompt,
+    AI_DIRECTOR_SYSTEM_PROMPT,
+    FORM_BASED_SCRIPT_SYSTEM_PROMPT,
+    get_form_based_script_prompt,
+    IMAGE_BASED_SCRIPT_SYSTEM_PROMPT,
+    get_image_based_script_prompt
+)
+
 # 加载环境变量
 load_dotenv()
 
@@ -38,9 +51,14 @@ LLM_MODEL_NAME = os.getenv("LLM_MODEL_NAME", "gemini-2.0-flash-exp")  # 使用�
 LLM_API_KEY = os.getenv("LLM_API_KEY")
 LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://yunwu.ai")
 
-VIDEO_MODEL_NAME = os.getenv("VIDEO_MODEL_NAME", "sora-2-portrait-hd")
+VIDEO_MODEL_NAME = os.getenv("VIDEO_MODEL_NAME", "sora-2")
 VIDEO_API_KEY = os.getenv("VIDEO_GENERATION_API_KEY")
 VIDEO_BASE_URL = os.getenv("VIDEO_GENERATION_ENDPOINT", "https://yunwu.ai")
+
+# Sora角色视频生成配置
+CHARACTER_VIDEO_MODEL_NAME = os.getenv("CHARACTER_VIDEO_MODEL_NAME", "sora-2")
+CHARACTER_VIDEO_API_KEY = os.getenv("CHARACTER_VIDEO_API_KEY")
+CHARACTER_VIDEO_BASE_URL = os.getenv("CHARACTER_VIDEO_ENDPOINT", "https://yunwu.ai")
 
 
 if not TOS_ACCESS_KEY or not TOS_SECRET_KEY:
@@ -79,12 +97,12 @@ print(f"[TOS] Virtual-Host模式: 自动启用")
 
 print("="*80)
 print("[SERVER INFO] SoraDirector Backend Starting")
-print("[SERVER INFO] Build Version: 2025-12-17-v3-sora2-optimized")
-print("[SERVER INFO] 新增功能：")
-print("  - 产品理解：负面提示词生成（避免产品变形）")
+print("[SERVER INFO] Build Version: 2025-12-19-v4-character-support")
+print("[SERVER INFO] 核心功能：")
 print("  - 脚本生成：使用Sora 2标准模板结构")
 print("  - 视频生成：添加产品材质和几何描述")
-print("[SERVER INFO] API Endpoints: /understand-product, /analyze-market, /generate-strategy, etc.")
+print("  - 角色创建：支持sora-2-characters模型")
+print("[SERVER INFO] API Endpoints: /upload-image, /generate-script, /generate-video, /query-video-task, /create-character")
 print("="*80)
 
 # AI 客户端（用于对话和视频生成）
@@ -139,9 +157,10 @@ class GenerateVideoRequest(BaseModel):
     images: Optional[List[str]] = []  # 图片URL列表
     orientation: Optional[str] = "portrait"  # portrait 竖屏, landscape 横屏
     size: Optional[str] = "large"  # small (720p) 或 large
-    duration: Optional[int] = 10  # 视频时长，支持 10 秒
+    duration: Optional[int] = 10  # 视频时长，支持10秒
     watermark: Optional[bool] = False  # 是否有水印
     private: Optional[bool] = True  # 是否隐藏视频
+    character_id: Optional[str] = None  # 新增：角色ID，如果传入则使用带角色的视频生成接口
 
 
 class VideoTaskRequest(BaseModel):
@@ -173,6 +192,28 @@ class GenerateScriptFromProductRequest(BaseModel):
     sellingPoints: List[str]  # 核心卖点
     language: str  # 语言（zh-CN, en-US, id-ID, vi-VN）
     duration: int  # 时长（15或25）
+
+class GenerateCharacterRequest(BaseModel):
+    """使用AI生成角色信息请求"""
+    model: Optional[str] = "gpt-4"
+    prompt: Optional[str] = None
+    country: Optional[str] = None  # 新增：国家
+    ethnicity: Optional[str] = None  # 新增：人种
+    age: Optional[int] = None  # 新增：年龄
+    gender: Optional[str] = None  # 新增：性别
+
+class GenerateScriptAIRequest(BaseModel):
+    """使用ChatGPT生成脚本请求（新的4阶段工作流）"""
+    productName: str
+    category: str
+    usage: str
+    sellingPoints: str
+    country: str
+    language: str
+    duration: str  # "15s" 或 "25s"
+    style: Optional[str] = None  # 新增：视频风格
+    characterName: Optional[str] = None  # 角色名称
+    characterDescription: Optional[str] = None  # 角色描述
 
 # 已移除产品理解相关的数据模型 - 不再需要视觉识别功能
 
@@ -265,7 +306,7 @@ def url_to_base64(image_url: str) -> str:
         print(f"[ERROR] 图片转换base64失败: {e}")
         return None
 
-async def chat_with_ai(prompt: str, system_prompt: str = None, image_url: str = None, history: List[dict] = None) -> str:
+async def chat_with_ai(prompt: str, system_prompt: Optional[str] = None, image_url: Optional[str] = None, history: Optional[List[dict]] = None) -> str:
     """
     使用 AI 对话模型生成回复（支持多模态+对话历史）
     image_url 参数可以是 URL 或 base64 data URL
@@ -298,6 +339,7 @@ async def chat_with_ai(prompt: str, system_prompt: str = None, image_url: str = 
                     # 转换失败，仅发送文本
                     messages.append({"role": "user", "content": prompt})
                     print(f"[DEBUG] 图片转换失败，仅发送文本")
+                    base64_image = ""  # 设置为空字符串而非None
                 else:
                     print(f"[DEBUG] URL转换为base64，长度: {len(base64_image)}")
             
@@ -365,9 +407,9 @@ async def chat_with_ai(prompt: str, system_prompt: str = None, image_url: str = 
         return f"抱歉，AI 服务暂时不可用。请稍后再试。"
 
 
-async def generate_video_with_ai(prompt: str, images: List[str] = None, orientation: str = "portrait", 
-                                size: str = "large", duration: int = 10, watermark: bool = False, 
-                                private: bool = True, product_attributes: dict = None, negative_prompts: List[str] = None) -> dict:
+async def generate_video_with_ai(prompt: str, images: Optional[List[str]] = None, orientation: Optional[str] = "portrait", 
+                                size: Optional[str] = "large", duration: Optional[int] = 15, watermark: bool = False, 
+                                private: bool = True, product_attributes: Optional[dict] = None, negative_prompts: Optional[List[str]] = None, character_id: Optional[str] = None) -> dict:
     """
     使用 Sora API 生成视频（云雾 API）
     PRD Phase 4: Prompt Assembly - 整合所有约束生成最终Prompt
@@ -376,6 +418,7 @@ async def generate_video_with_ai(prompt: str, images: List[str] = None, orientat
     1. 强调产品的结构和材质（geometric, solid, sturdy, clean lines, professional product shot）
     2. 添加负面提示词避免变形（deformed, distorted, malformed, bad anatomy）
     3. 使用专业摄影术语（low-angle shot, shallow depth of field）
+    4. 支持角色：如果传入character_id，则使用带Character的视频生成接口
     """
     # 优化Prompt：添加产品结构和材质描述
     enhanced_prompt = prompt
@@ -414,23 +457,40 @@ async def generate_video_with_ai(prompt: str, images: List[str] = None, orientat
             "Accept": "application/json"
         }
         
-        # 构建请求数据（符合官方 API 规范）
+        # 构建请求数据（符合云雾 Sora API 规范）
+        # API文档：https://yunwu.apifox.cn/api-358068907.md
         payload = {
-            "model": VIDEO_MODEL_NAME,
+            "model": VIDEO_MODEL_NAME,  # sora-2 或 sora-2-pro
             "prompt": enhanced_prompt,  # 使用增强后的Prompt
             "images": images if images else [],
-            "orientation": orientation,
-            "size": size,
-            "duration": duration,
-            "watermark": watermark,
-            "private": private
+            "orientation": orientation,  # portrait 或 landscape
+            "size": size,  # small 或 large
+            "duration": 15,  # 固定使用15秒（API要求）
+            "watermark": watermark  # 布尔值格式（修复：从字符串改为布尔值）
         }
         
-        print(f"[VIDEO GENERATION] Enhanced Prompt: {enhanced_prompt[:200]}...")  # 打印前200个字符
+        # 根据是否有角色ID添加参数
+        if character_id:
+            payload["character_id"] = character_id
+            print(f"[VIDEO GENERATION] 使用角色生成视频，character_id: {character_id}")
+            # 云雾API文档：https://yunwu.apifox.cn/api-369666077.md
         
-        # 调用创建视频任务接口（云雾 API）
+        # 统一使用 /v1/video/create 端点（无论是否有角色）
+        api_endpoint = f"{VIDEO_BASE_URL}/v1/video/create"
+        # 云雾API文档：
+        # - 普通视频：https://yunwu.apifox.cn/api-358068907.md
+        # - 带角色：https://yunwu.apifox.cn/api-369666077.md
+        
+        print(f"[VIDEO GENERATION] Enhanced Prompt: {enhanced_prompt[:200]}...")  # 打印前200个字符
+        print(f"[VIDEO GENERATION] API Endpoint: {api_endpoint}")
+        if character_id:
+            print(f"[VIDEO GENERATION] Character ID: {character_id}")
+        
+        # 调用创建视频任务接口（云雾 API - 统一视频格式）
+        # 参考文档：https://yunwu.apifox.cn/api-358068907.md (普通)
+        # 或 https://yunwu.apifox.cn/api-369666077.md (带Character)
         response = requests.post(
-            f"{VIDEO_BASE_URL}/v1/video/create",
+            api_endpoint,
             headers=headers,
             json=payload,
             timeout=30
@@ -441,60 +501,33 @@ async def generate_video_with_ai(prompt: str, images: List[str] = None, orientat
         
         result = response.json()
         
+        print(f"[VIDEO GENERATION] API返回: {result}")
+        
         # 根据实际 API 响应结构提取数据
-        # 通常 Sora API 会返回任务 ID，需要轮询查询状态
-        if "id" in result:
-            # 异步任务，返回任务 ID
-            task_id = result["id"]
-            
-            # 轮询查询任务状态（最多等待 60 秒）
-            max_attempts = 60
-            for attempt in range(max_attempts):
-                await asyncio.sleep(2)  # 每 2 秒查询一次
-                
-                status_response = requests.get(
-                    f"{VIDEO_BASE_URL}/v1/video/query",
-                    headers=headers,
-                    params={"id": task_id},
-                    timeout=10
-                )
-                
-                if status_response.status_code == 200:
-                    status_data = status_response.json()
-                    
-                    # 检查任务状态
-                    task_status = status_data.get("status", "")
-                    
-                    if task_status == "completed":
-                        # 任务完成，返回视频 URL
-                        video_url = status_data.get("video_url")
-                        return {
-                            "url": video_url,
-                            "status": "completed",
-                            "task_id": task_id,
-                            "enhanced_prompt": status_data.get("enhanced_prompt")
-                        }
-                    elif task_status == "failed":
-                        # 任务失败
-                        error_msg = status_data.get("error", "未知错误")
-                        raise Exception(f"视频生成失败: {error_msg}")
-            
-            # 超时未完成
+        # 情兵1：直接返回结果（同步模式）
+        if "url" in result or "video_url" in result:
+            video_url = result.get("video_url") or result.get("url")
+            print(f"[VIDEO GENERATION] ✅ 视频立即生成完成: {video_url}")
+            return {
+                "url": video_url,
+                "thumbnail": result.get("thumbnail"),
+                "status": "completed",
+                "enhanced_prompt": result.get("enhanced_prompt")
+            }
+        
+        # 情兵2：返回任务ID（异步模式）- 立即返回，不要轮询
+        elif "id" in result or "task_id" in result:
+            task_id = result.get("id") or result.get("task_id")
+            print(f"[VIDEO GENERATION] 🔄 异步任务创建成功: {task_id}")
             return {
                 "status": "processing",
                 "task_id": task_id,
                 "message": "视频生成中，请稍后查询任务状态"
             }
         
-        # 如果直接返回结果（同步模式）
-        elif "url" in result or "data" in result:
-            video_url = result.get("url") or result.get("data", {}).get("url")
-            return {
-                "url": video_url,
-                "status": "completed"
-            }
+        # 情兵3：未知响应格式
         else:
-            # 未知响应格式
+            print(f"[VIDEO GENERATION] ⚠️ 未知响应格式: {result}")
             return {
                 "status": "unknown",
                 "raw_response": result
@@ -517,8 +550,10 @@ async def generate_video_with_ai(prompt: str, images: List[str] = None, orientat
 def build_public_url(bucket: str, key: str) -> str:
     """
     根据 TOS S3 兼容域名生成访问 URL
-    火山云 TOS 访问格式：https://<bucket>.<endpoint>/<key>
+    火山云 TOS 访问格式：https://<bucket>.tos-<region>.volces.com/<key>
+    例如：https://sora-2.tos-cn-beijing.volces.com/uploads/...
     """
+    # endpoint已经是 tos-cn-beijing.volces.com 格式
     endpoint = TOS_ENDPOINT.replace("https://", "").replace("http://", "")
     return f"https://{bucket}.{endpoint}/{key}"
 
@@ -543,6 +578,7 @@ async def health_check():
 # ======================
 
 @app.post("/upload-image")
+@app.post("/api/upload-image")  # 兼容前端调用
 async def upload_image(file: UploadFile = File(...)):
     # 支持图片和视频上传
     allowed_types = ["image/", "video/"]
@@ -554,29 +590,44 @@ async def upload_image(file: UploadFile = File(...)):
     key = f"uploads/{time.strftime('%Y%m%d')}/{int(time.time()*1000)}-{uuid.uuid4().hex}{ext}"
 
     print(f"[Upload] 开始上传: {file.filename}")
+    print(f"[Upload] Content-Type: {file.content_type}")
     print(f"[Upload] Bucket: {TOS_BUCKET}")
     print(f"[Upload] Key: {key}")
     print(f"[Upload] Endpoint: {TOS_ENDPOINT}")
-    print(f"[Upload] AK: {TOS_ACCESS_KEY[:10]}...")
+    print(f"[Upload] Region: {TOS_REGION}")
+    print(f"[Upload] AK: {TOS_ACCESS_KEY[:10] if TOS_ACCESS_KEY else 'None'}...")
 
     try:
         # 读取文件内容
         content = await file.read()
+        file_size = len(content)
+        print(f"[Upload] 文件大小: {file_size} bytes ({file_size/1024:.2f} KB)")
         
-        # 使用TOS SDK上传
+        if file_size == 0:
+            raise HTTPException(status_code=400, detail="文件为空")
+        
+        # 使用TOS SDK上传（Virtual-Host模式）
+        print(f"[Upload] 调用TOS SDK put_object...")
+        print(f"[Upload] 将上传 {file_size} 字节的数据")
+        
+        # 使用BytesIO包装以确保完整传输
+        from io import BytesIO
         result = tos_client.put_object(
             bucket=TOS_BUCKET,
             key=key,
-            content=content,
+            content=BytesIO(content),  # 使用BytesIO包装
+            content_length=file_size,   # 明确指定长度
             content_type=file.content_type
         )
         
-        print(f"[Upload] 上传成功: {key}")
+        print(f"[Upload] ✅ 上传成功!")
         print(f"[Upload] RequestID: {result.request_id}")
+        print(f"[Upload] ETag: {result.etag if hasattr(result, 'etag') else 'N/A'}")
         
     except tos.exceptions.TosServerError as e:
-        print(f"[Upload Error] TOS服务器错误: {e.status_code}")
+        print(f"[Upload Error] ❌ TOS服务器错误")
         print("="*80)
+        print(f"Status Code: {e.status_code}")
         print(f"RequestID: {e.request_id}")
         print(f"Code: {e.code}")
         print(f"Message: {e.message}")
@@ -585,19 +636,26 @@ async def upload_image(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=f"上传失败: {e.message}")
         
     except tos.exceptions.TosClientError as e:
-        print(f"[Upload Error] TOS客户端错误: {e.message}")
+        print(f"[Upload Error] ❌ TOS客户端错误: {e.message}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"上传失败: {e.message}")
         
     except Exception as e:
-        print(f"[Upload Error] 未知错误: {type(e).__name__}")
+        print(f"[Upload Error] ❌ 未知错误: {type(e).__name__}")
         print(f"[Upload Error] 错误详情: {str(e)}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"上传失败: {str(e)}")
 
+    # 构建Virtual-Host访问URL
     url = build_public_url(TOS_BUCKET, key)
     print(f"[Upload] 返回URL: {url}")
-    return {"url": url}
+    print(f"[Upload] Virtual-Host格式: {TOS_BUCKET}.{TOS_ENDPOINT.replace('https://', '')}")
+    print(f"[Upload] 完成！文件大小: {file_size} bytes")
+    print("="*80)
+    
+    return {"url": url, "size": file_size}
 
 
 # ======================
@@ -610,34 +668,8 @@ async def send_chat(req: ChatRequest):
     lower = content.lower()
     now_id = str(int(time.time() * 1000))
     
-    # 系统提示词：定义 AI 导演的角色（按PRD要求）
-    system_prompt = """你是 SoraDirector 的 AI 导演助手，帮助用户创作产品视频。
-
-工作流程：
-1. 视觉锁定：识别产品 → 选择尺寸
-2. 交互选角：提取市场/年龄/性别/风格，生成角色卡
-3. 交互编剧：收集痛点 → 动作 → 语言风格，生成脚本
-4. 生成视频
-
-角色定位：
-- 不是简单的问答机器人，而是智能导演助手
-- 能理解上下文，自动判断当前阶段
-- 根据用户回答提取结构化信息
-
-重要规则：
-1. LANGUAGE: 必须始终用中文对话！用户提到的语言（泰语/印尼语）是脚本语言，不是对话语言
-2. CONVERSATIONAL: 一次一个问题，等待用户回答
-3. CONTEXT-AWARE: 根据对话历史判断当前阶段，自然进行对话
-4. MEMORY: 你能看到完整的对话历史，不要重复问已知问题
-
-结构化数据输出：
-- 当用户描述了市场/人群/风格时，在回复末尾添加：
-  CHARACTER_DATA: {{"market": "市场", "age": "年龄段", "gender": "性别", "vibe": "风格"}}
-  
-- 当用户提供了语言风格且之前已收集了痛点和动作时，生成脚本并添加：
-  SCRIPT_DATA: [{{"time": "0-3s", "audio": "台词", "emotion": "情绪"}}, ...]
-
-回答风格：简洁、专业、友好。"""
+    # 使用配置的AI导演助手prompt
+    system_prompt = AI_DIRECTOR_SYSTEM_PROMPT
     
     # 直接进行自然对话，不再需要视觉识别和尺寸选择
     
@@ -720,60 +752,22 @@ async def generate_script(req: GenerateScriptRequest):
     try:
         info = req.productInfo
         
-        # 构建AI Prompt - 使用Sora 2标准模板结构
-        prompt = f"""你是专业的视频脚本创作导演。根据以下产品信息和图片，创作一个10秒的UGC风格短视频脚本。
-
-产品信息：
-- 商品名称：{info.productName}
-- 尺寸规格：{info.size or '未提供'}
-- 重量：{info.weight or '未提供'}
-- 核心卖点：{info.sellingPoints}
-
-目标用户：
-- 市场：{info.targetMarket}
-- 年龄段：{info.ageGroup}
-- 性别：{info.gender}
-- 视频风格：{info.style}
-
-请按照Sora 2标准Prompt模板结构返回JSON：
-{{
-  "videoStyle": "视频风格描述（如：真实手持视频，casual对话风格，小企业主与朋友聊天，自然且不做作，轻微相机抖动，竖屏视频，15秒）",
-  "scene": "场景描述（如：简单办公室，白墙背景，杂乱的产品盒堆叠和随机样品，空间感觉小而实用，像是典型的跨境电商工作空间）",
-  "camera": "镜头运动（如：Front-facing selfie camera, eye-level, medium to medium-close shot, subtle handheld movement）",
-  "tonePacing": "节奏和基调（如：轻松、友好、对话式。听起来像和朋友聊天，不是推销，自然停顿，轻松表达，简单节奏）",
-  "character": "角色描述（如：30多岁的小型跨境电商主，穿着休闲服（帽衫或T恤），看起来普通但舒适且容易接近，脚踏实地、实用、诚实）",
-  "script": [
-    {{
-      "time": "0-3s",
-      "scene": "场景描述",
-      "action": "人物动作",
-      "audio": "视频台词/画外音",
-      "emotion": "情绪状态"
-    }}
-  ],
-  "audio": "音频描述（如：清晰的口述，无背景音乐，轻微室内环境音）",
-  "overallFeeling": "整体感觉（如：与朋友聊天的氛围，低压力，高度可信，草根创业者能量）"
-}}
-
-要求：
-1. 生成一个符合{info.style}风格的短视频脚本
-2. 包含3-4个分镜场景，总时长10秒
-3. 使用{info.targetMarket}市场常用的语言风格
-4. 采用UGC口语化表达，避免广告语言
-5. 情绪要有对比：开始焦虑/痛点 → 结束轻松/满意
-6. camera字段使用专业摄影术语（如：low-angle shot, dolly zoom, shallow depth of field）
-
-仅返回JSON，不要其他文字。"""
+        # 使用prompt配置文件生成prompt
+        product_info_dict = {
+            'productName': info.productName,
+            'size': info.size,
+            'weight': info.weight,
+            'sellingPoints': info.sellingPoints,
+            'targetMarket': info.targetMarket,
+            'ageGroup': info.ageGroup,
+            'gender': info.gender,
+            'style': info.style
+        }
+        
+        prompt = get_form_based_script_prompt(product_info_dict, req.imageUrl)
         
         # 调用AI生成脚本
-        system_prompt = """你是专业的短视频脚本创作导演，擅长为电商产品创作UGC风格的短视频内容。
-你的作品特点：
-1. 口语化、真实感强，不使用广告语
-2. 情绪对比鲜明，有痛点有解决
-3. 符合目标市场的文化习惯和语言风格
-4. 分镜结构清晰，节奏紧凑"""
-        
-        ai_response = await chat_with_ai(prompt, system_prompt, image_url=req.imageUrl)
+        ai_response = await chat_with_ai(prompt, FORM_BASED_SCRIPT_SYSTEM_PROMPT, image_url=req.imageUrl)
         
         # 解析AI返回的JSON
         import json
@@ -827,63 +821,20 @@ async def generate_script_from_product(req: GenerateScriptFromProductRequest):
         }
         target_language = language_map.get(req.language, '中文')
         
-        # 构廻AI Prompt
-        selling_points_text = '\n'.join([f"- {point}" for point in req.sellingPoints])
-        
-        prompt = f"""你是专业的短视频脚本创作导演。
-
-商品信息：
-- 商品名称：{req.productName}
-- 使用方式：{req.usageMethod}
-- 商品图片：共{len(req.productImages)}张高保真图片
-
-核心卖点：
-{selling_points_text}
-
-目标语言：{target_language}
-视频时长：{req.duration}秒
-
-任务：创作一个{req.duration}秒的产品展示短视频脚本。
-
-要求：
-1. 生成3-5个镜头，每个镜头对应一张商品图片（imageIndex: 0-4）
-2. 每个镜头包含：时间、场景、动作、台词、情绪
-3. 台词必须使用{target_language}，口语化、自然，符合UGC风格
-4. 突出核心卖点，展示{req.usageMethod}过程
-5. 情绪弧线：从“好奇/中性”到“满意/兴奋”
-
-返回JSON格式：
-{{
-  "shots": [
-    {{
-      "time": "0-{int(req.duration/3)}s",
-      "scene": "场景描述",
-      "action": "{req.usageMethod}动作",
-      "audio": "{target_language}台词内容",
-      "emotion": "情绪状态",
-      "imageIndex": 0
-    }}
-  ]
-}}
-
-示例台词风格（{target_language}）：
-- 第一镜头：介绍产品亮相，吸引注意力
-- 中间镜头：展示具体卖点和使用方法
-- 最后镜头：总结优势，强调价值
-
-仅返回JSON，不要其他文字。"""
-        
-        system_prompt = f"""你是专业的短视频脚本创作导演，擅长：
-1. 多语言UGC风格内容创作（中文、英文、印尼语、越南语）
-2. 产品卖点与使用场景结合
-3. 镜头设计紧凑，节奏明快（15s或25s）
-4. 情绪起伏自然，吸引力强
-5. 台词必须使用目标语言（{target_language}）"""
+        # 使用prompt配置文件生成prompt
+        prompt = get_image_based_script_prompt(
+            product_name=req.productName,
+            usage_method=req.usageMethod,
+            selling_points=req.sellingPoints,
+            language=target_language,
+            duration=req.duration,
+            num_images=len(req.productImages)
+        )
         
         # 调用AI生成脚本
         ai_response = await chat_with_ai(
             prompt, 
-            system_prompt, 
+            IMAGE_BASED_SCRIPT_SYSTEM_PROMPT, 
             image_url=req.productImages[0]  # 传入第一张图片作为参考
         )
         
@@ -942,9 +893,11 @@ async def generate_script_from_product(req: GenerateScriptFromProductRequest):
 # ======================
 
 @app.post("/generate-video")
+@app.post("/api/generate-video")  # 兼容前端调用
 async def generate_video(req: GenerateVideoRequest):
     """
     调用 AI 视频生成服务（Sora）
+    支持角色：如果传入character_id，则使用带Character的视频生成API
     """
     try:
         # 调用 AI 视频生成
@@ -955,7 +908,8 @@ async def generate_video(req: GenerateVideoRequest):
             size=req.size,
             duration=req.duration,
             watermark=req.watermark,
-            private=req.private
+            private=req.private,
+            character_id=req.character_id  # 新增：传递角色ID
         )
         return result
     except Exception as e:
@@ -966,7 +920,8 @@ async def generate_video(req: GenerateVideoRequest):
 @app.post("/query-video-task")
 async def query_video_task(req: VideoTaskRequest):
     """
-    查询视频生成任务状态
+    查询视频生成任务状态（POST版本，保留兼容）
+    云雾API文档：https://yunwu.apifox.cn/api-358068905.md
     """
     if not VIDEO_API_KEY:
         raise HTTPException(status_code=400, detail="视频生成服务未配置")
@@ -977,10 +932,10 @@ async def query_video_task(req: VideoTaskRequest):
             "Content-Type": "application/json"
         }
         
+        # 使用统一视频格式的查询endpoint
         response = requests.get(
-            f"{VIDEO_BASE_URL}/v1/video/query",
+            f"{VIDEO_BASE_URL}/v1/video/generations/{req.task_id}",
             headers=headers,
-            params={"id": req.task_id},
             timeout=10
         )
         
@@ -994,6 +949,377 @@ async def query_video_task(req: VideoTaskRequest):
         return result
     except requests.RequestException as e:
         raise HTTPException(status_code=500, detail=f"查询失败: {str(e)}")
+
+
+@app.get("/api/video-task/{task_id}")
+@app.get("/video-task/{task_id}")
+async def query_video_task_get(task_id: str):
+    """
+    查询视频生成任务状态（GET版本，前端使用）
+    云雾API文档：https://yunwu.apifox.cn/api-358068905.md
+    路径参数：task_id - 任务ID
+    """
+    if not VIDEO_API_KEY:
+        raise HTTPException(status_code=400, detail="视频生成服务未配置")
+    
+    try:
+        print(f"[查询任务] Task ID: {task_id}")
+        
+        headers = {
+            "Authorization": f"Bearer {VIDEO_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        
+        # 使用统一视频格式的查询endpoint
+        response = requests.get(
+            f"{VIDEO_BASE_URL}/v1/video/generations/{task_id}",
+            headers=headers,
+            timeout=10
+        )
+        
+        print(f"[查询任务] 云雾API响应状态码: {response.status_code}")
+        
+        if response.status_code != 200:
+            print(f"[查询任务] 云雾API错误: {response.text}")
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=f"查询任务失败: {response.text}"
+            )
+        
+        result = response.json()
+        print(f"[查询任务] 返回数据: status={result.get('status')}, progress={result.get('progress')}")
+        return result
+        
+    except requests.RequestException as e:
+        print(f"[查询任务] 请求异常: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"查询失败: {str(e)}")
+
+
+@app.post("/api/generate-character")
+async def generate_character(req: GenerateCharacterRequest):
+    """
+    使用AI生成角色信息
+    使用配置的LLM模型（ChatGPT/Gemini等）
+    """
+    print("="*80)
+    print("[API] /api/generate-character 收到请求")
+    print(f"[请求数据] model: {req.model}")
+    print(f"[请求数据] country: {req.country}")
+    print(f"[请求数据] ethnicity: {req.ethnicity}")
+    print(f"[请求数据] age: {req.age}")
+    print(f"[请求数据] gender: {req.gender}")
+    print("="*80)
+    
+    if not ai_client:
+        print("[错误] AI服务未配置")
+        raise HTTPException(status_code=400, detail="AI服务未配置")
+    
+    # 使用prompt配置文件生成prompt（如果前端传了就用前端的）
+    prompt = req.prompt or get_character_generation_prompt(
+        country=req.country,
+        ethnicity=req.ethnicity,
+        age=req.age,
+        gender=req.gender
+    )
+    
+    try:
+        print(f"[AI调用] 开始调用AI，模型: {LLM_MODEL_NAME}")
+        response = ai_client.chat.completions.create(
+            model=LLM_MODEL_NAME,
+            messages=[
+                {"role": "system", "content": CHARACTER_GENERATION_SYSTEM_PROMPT},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.8,
+            max_tokens=500
+        )
+        
+        content = response.choices[0].message.content.strip()
+        print(f"[AI响应] 原始内容长度: {len(content)}")
+        print(f"[AI响应] 内容预览: {content[:300]}...")
+        
+        # 解析JSON（去除可能的markdown代码块）
+        import json
+        import re
+        json_match = re.search(r'```(?:json)?\s*({[^`]+})\s*```', content)
+        if json_match:
+            json_str = json_match.group(1)
+            print("[解析] 从markdown代码块中提取JSON")
+        else:
+            json_str = content
+            print("[解析] 直接解析内容")
+        
+        character_data = json.loads(json_str)
+        print(f"[成功] 解析角色数据: {json.dumps(character_data, ensure_ascii=False)}")
+        print("="*80)
+        return character_data
+        
+    except Exception as e:
+        print(f"[AI生成角色错误] {str(e)}")
+        import traceback
+        traceback.print_exc()
+        print("="*80)
+        raise HTTPException(status_code=500, detail=f"生成角色失败: {str(e)}")
+
+
+@app.post("/api/generate-script-ai")
+async def generate_script_ai(req: GenerateScriptAIRequest):
+    """
+    使用ChatGPT生成视频脚本（新4阶段工作流程）
+    根据商品信息、角色、视频配置生成完整的视频脚本
+    """
+    if not ai_client:
+        raise HTTPException(status_code=400, detail="AI服务未配置")
+    
+    try:
+        # 语言映射（支持前端的所有语言代码）
+        language_map = {
+            'zh-CN': '中文',
+            'zh': '中文',
+            'en-US': '英语',
+            'en': '英语',
+            'de': '德语',
+            'es': '西班牙语',
+            'th': '泰语',
+            'vi-VN': '越南语',
+            'vi': '越南语',
+            'ja': '日语',
+            'fil': '菲律宾语',
+            'ms': '马来语',
+            'id-ID': '印尼语',
+            'id': '印尼语',
+        }
+        target_language = language_map.get(req.language, req.language)  # 如果找不到，就直接使用原值
+        
+        print(f"[脚本生成] 请求语言代码: {req.language}")
+        print(f"[脚本生成] 映射后语言: {target_language}")
+        
+        # 解析时长
+        duration_seconds = int(req.duration.replace('s', ''))
+        
+        # 使用prompt配置文件生成prompt
+        prompt = get_script_generation_prompt(
+            product_name=req.productName,
+            category=req.category,
+            usage=req.usage,
+            selling_points=req.sellingPoints,
+            country=req.country,
+            language=target_language,
+            duration=duration_seconds,
+            character_name=req.characterName,
+            character_description=req.characterDescription,
+            style=req.style
+        )
+        
+        # 调用AI生成脚本
+        response = ai_client.chat.completions.create(
+            model=LLM_MODEL_NAME,
+            messages=[
+                {"role": "system", "content": SCRIPT_GENERATION_SYSTEM_PROMPT},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.8,
+            max_tokens=2000
+        )
+        
+        content = response.choices[0].message.content.strip()
+        print(f"[AI生成脚本] 原始响应: {content[:200]}...")
+        
+        # 解析JSON
+        import json
+        import re
+        json_match = re.search(r'```(?:json)?\s*({[\s\S]+?})\s*```', content)
+        if json_match:
+            json_str = json_match.group(1)
+        else:
+            # 尝试直接解析
+            json_str = content
+        
+        result = json.loads(json_str)
+        shots = result.get('shots', [])
+        
+        # 验证脚本数据
+        if not shots:
+            raise HTTPException(status_code=500, detail="生成的脚本为空")
+        
+        return {
+            "success": True,
+            "shots": shots
+        }
+        
+    except json.JSONDecodeError as e:
+        print(f"JSON解析错误: {e}")
+        print(f"原始内容: {content}")
+        raise HTTPException(status_code=500, detail=f"AI返回数据解析失败: {str(e)}")
+    except Exception as e:
+        print(f"脚本生成错误: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"生成脚本失败: {str(e)}")
+
+
+class CreateCharacterRequest(BaseModel):
+    """创建角色请求"""
+    name: str
+    description: str
+    age: Optional[int] = None
+    gender: Optional[str] = None
+    style: Optional[str] = None
+    tags: Optional[List[str]] = None
+
+
+@app.post("/create-character")
+async def create_character(req: CreateCharacterRequest):
+    """
+    创建角色（本地存储，不调用云雾API）
+    前端会把角色信息保存到本地store
+    """
+    try:
+        import uuid
+        
+        # 生成本地角色ID
+        character_id = f"char_{uuid.uuid4().hex[:12]}"
+        
+        print(f"[创建角色] 角色名称: {req.name}")
+        print(f"[创建角色] 角色ID: {character_id}")
+        print(f"[创建角色] 描述长度: {len(req.description)} 字")
+        
+        # 返回成功响应
+        return {
+            "success": True,
+            "character_id": character_id,
+            "data": {
+                "id": character_id,
+                "name": req.name,
+                "description": req.description,
+                "age": req.age,
+                "gender": req.gender,
+                "style": req.style,
+                "tags": req.tags
+            }
+        }
+        
+    except Exception as e:
+        print(f"[创建角色错误] {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"创建角色失败: {str(e)}")
+
+
+# ======================
+# 管理员 API
+# ======================
+
+# 模拟数据库（实际应用中应该使用真实数据库）
+ADMIN_USERS = {"admin@soradirector.com"}  # 管理员邮箱列表
+all_users_db = []  # 所有用户
+all_videos_db = []  # 所有视频
+all_prompts_db = []  # 所有提示词
+
+@app.get("/api/public-videos")
+async def get_public_videos():
+    """
+    获取所有公开的视频（内容广场）
+    """
+    try:
+        public_videos = [v for v in all_videos_db if v.get('isPublic', False)]
+        return {"videos": public_videos}
+    except Exception as e:
+        print(f"获取公开视频失败: {e}")
+        return {"videos": []}
+
+@app.get("/api/admin/stats")
+async def get_admin_stats():
+    """
+    获取管理员统计数据
+    """
+    try:
+        total_credits_used = sum(user.get('creditsUsed', 0) for user in all_users_db)
+        return {
+            "totalUsers": len(all_users_db),
+            "totalVideos": len(all_videos_db),
+            "publicVideos": len([v for v in all_videos_db if v.get('isPublic', False)]),
+            "totalCreditsUsed": total_credits_used
+        }
+    except Exception as e:
+        print(f"获取统计数据失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/admin/users")
+async def get_all_users():
+    """
+    获取所有用户列表
+    """
+    try:
+        return {"users": all_users_db}
+    except Exception as e:
+        print(f"获取用户列表失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/admin/videos")
+async def get_all_videos():
+    """
+    获取所有视频（包括未公开的）
+    """
+    try:
+        return {"videos": all_videos_db}
+    except Exception as e:
+        print(f"获取视频列表失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/admin/prompts")
+async def get_all_prompts():
+    """
+    获取所有提示词
+    """
+    try:
+        return {"prompts": all_prompts_db}
+    except Exception as e:
+        print(f"获取提示词列表失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/admin/video/{video_id}/public")
+async def toggle_video_public(video_id: str, isPublic: bool = True):
+    """
+    切换视频的公开状态
+    """
+    try:
+        for video in all_videos_db:
+            if video['id'] == video_id:
+                video['isPublic'] = isPublic
+                return {"success": True}
+        raise HTTPException(status_code=404, detail="视频不存在")
+    except Exception as e:
+        print(f"切换视频公开状态失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/admin/video/{video_id}")
+async def delete_video_admin(video_id: str):
+    """
+    删除视频
+    """
+    try:
+        global all_videos_db
+        all_videos_db = [v for v in all_videos_db if v['id'] != video_id]
+        return {"success": True}
+    except Exception as e:
+        print(f"删除视频失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/admin/user/{user_id}/credits")
+async def update_user_credits(user_id: str, credits: int):
+    """
+    更新用户积分
+    """
+    try:
+        for user in all_users_db:
+            if user['id'] == user_id:
+                user['credits'] = credits
+                return {"success": True}
+        raise HTTPException(status_code=404, detail="用户不存在")
+    except Exception as e:
+        print(f"更新用户积分失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":

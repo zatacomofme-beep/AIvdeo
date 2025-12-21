@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>测试上传</title>
+</head>
+<body>
+    <h1>测试图片上传</h1>
+    <input type="file" id="fileInput" accept="image/*">
+    <button onclick="upload()">上传</button>
+    <div id="result"></div>
+
+    <script>
+        async function upload() {
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+            if (!file) {
+                alert('请选择文件');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            console.log('开始上传...');
+            console.log('文件名:', file.name);
+            console.log('文件类型:', file.type);
+            console.log('文件大小:', file.size);
+
+            try {
+                const response = await fetch('http://115.190.137.87:8000/api/upload-image', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                console.log('响应状态:', response.status);
+                console.log('响应头:', [...response.headers.entries()]);
+                
+                const text = await response.text();
+                console.log('响应内容:', text);
+
+                document.getElementById('result').innerHTML = `
+                    <h3>结果:</h3>
+                    <p>状态码: ${response.status}</p>
+                    <pre>${text}</pre>
+                `;
+
+                if (response.ok) {
+                    const data = JSON.parse(text);
+                    alert('上传成功！URL: ' + data.url);
+                } else {
+                    alert('上传失败: ' + text);
+                }
+            } catch (error) {
+                console.error('错误:', error);
+                document.getElementById('result').innerHTML = `<p style="color:red">错误: ${error.message}</p>`;
+            }
+        }
+    </script>
+</body>
+</html>

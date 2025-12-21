@@ -1,0 +1,32 @@
+graph TB
+    subgraph 前端层
+        A[React 18 + TypeScript]
+        B[Tailwind CSS v4]
+        C[Zustand 状态管理]
+        D[Vite 构建工具]
+    end
+    
+    subgraph 后端层
+        E[FastAPI Python]
+        F[OpenAI GPT-4o Vision]
+        G[Sora 2 视频生成]
+        H[火山云 TOS 存储]
+    end
+    
+    subgraph 核心功能流
+        I[图片上传] --> J[产品分析]
+        J --> K[脚本生成]
+        K --> L[视频渲染]
+    end
+    
+    A --> E
+    B --> A
+    C --> A
+    D --> A
+    E --> F
+    E --> G
+    E --> H
+    I --> E
+    J --> F
+    K --> F
+    L --> G

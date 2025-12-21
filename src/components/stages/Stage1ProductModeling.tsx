@@ -39,7 +39,7 @@ export function Stage1ProductModeling() {
         const formData = new FormData();
         formData.append('file', file);
         
-        const response = await fetch('http://localhost:8000/upload-image', {
+        const response = await fetch('http://115.190.137.87:8000/api/upload-image', {
           method: 'POST',
           body: formData,
         });
