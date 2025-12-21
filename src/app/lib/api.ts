@@ -124,8 +124,26 @@ export const api = {
     resolution: string;
     duration: number;
     language: string;
-    characterId?: string; // 新增：角色ID，如果传入则使用带角色的视频生成
+    // 移除 characterId 参数 - 角色信息已经整合在脚本中
   }) {
+    // 将分辨率映射为API期望的size格式
+    // 根据用户确认：size默认为"small"(字符串类型)
+    // small - 720p, large - 1080p
+    const sizeMap: { [key: string]: string } = {
+      '720p': 'small',
+      '1080p': 'large'
+    };
+    const size = sizeMap[params.resolution] || 'small';  // 默认small
+
+    // 将orientation映射为API期望的格式
+    // 前端使用: 'vertical' | 'horizontal'
+    // API需要: 'portrait' | 'landscape'
+    const orientationMap: { [key: string]: string } = {
+      'vertical': 'portrait',     // 竖屏
+      'horizontal': 'landscape'   // 横屏
+    };
+    const orientation = orientationMap[params.orientation] || 'portrait';  // 默认portrait
+
     const response = await fetch(`${API_BASE_URL}/api/generate-video`, {
       method: 'POST',
       headers: {
@@ -134,12 +152,12 @@ export const api = {
       body: JSON.stringify({
         prompt: params.script,
         images: params.productImages,
-        orientation: params.orientation,
-        size: params.resolution,
+        orientation: orientation,  // 使用映射后的值（portrait或landscape）
+        size: size,  // 修复：使用映射后的size值（small或large）
         duration: params.duration,
         watermark: false,  // 添加：是否有水印，默认false
         private: true,     // 添加：是否隐藏视频，默认true
-        character_id: params.characterId, // 传递角色ID
+        // 移除 character_id - 角色信息已通过脚本生成时整合到prompt中
       }),
     });
 

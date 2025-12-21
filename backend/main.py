@@ -8,15 +8,23 @@ import requests
 import base64
 from typing import Any, List, Optional
 from io import BytesIO
+from datetime import datetime
 
 import boto3
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.openapi.docs import get_swagger_ui_html
 from pydantic import BaseModel
 from openai import OpenAI
 from dotenv import load_dotenv
+from sqlalchemy.orm import Session
+
+# 导入数据库模块
+from database import (
+    get_db, test_connection, init_database,
+    User, Product, Project, Video, Character, SavedPrompt, CreditHistory
+)
 
 # 导入prompt配置
 from prompts import (
@@ -234,6 +242,23 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 数据库启动事件
+@app.on_event("startup")
+async def startup_event():
+    """应用启动时连接数据库"""
+    print("\n" + "="*80)
+    print("[DATABASE] 正在初始化数据库连接...")
+    print("="*80)
+    
+    if test_connection():
+        print("[DATABASE] ✓ 数据库连接成功！")
+        print("[DATABASE] 数据将保存到 PostgreSQL")
+    else:
+        print("[DATABASE] ✗ 数据库连接失败！")
+        print("[DATABASE] 应用将继续运行，但数据不会持久化")
+    
+    print("="*80 + "\n")
 
 @app.get("/docs", include_in_schema=False)
 def fallback_docs():
@@ -457,23 +482,29 @@ async def generate_video_with_ai(prompt: str, images: Optional[List[str]] = None
             "Accept": "application/json"
         }
         
-        # 构建请求数据（符合云雾 Sora API 规范）
+        # 构建请求数据（符合云雾API规范）
         # API文档：https://yunwu.apifox.cn/api-358068907.md
+        # 使用前端传来的size参数（small或large）
         payload = {
             "model": VIDEO_MODEL_NAME,  # sora-2 或 sora-2-pro
             "prompt": enhanced_prompt,  # 使用增强后的Prompt
             "images": images if images else [],
             "orientation": orientation,  # portrait 或 landscape
-            "size": size,  # small 或 large
-            "duration": 15,  # 固定使用15秒（API要求）
-            "watermark": watermark  # 布尔值格式（修复：从字符串改为布尔值）
+            "size": size,  # 使用前端传来的size（small或large）
+            "duration": 15,  # 整数15
+            "watermark": watermark,  # 布尔值
+            "private": private  # 布尔值 - 重要！必须传递
         }
         
+        print(f"[VIDEO GENERATION] 前端传入size: {size}, 实际使用: {size}")
+        
         # 根据是否有角色ID添加参数
-        if character_id:
-            payload["character_id"] = character_id
-            print(f"[VIDEO GENERATION] 使用角色生成视频，character_id: {character_id}")
-            # 云雾API文档：https://yunwu.apifox.cn/api-369666077.md
+        # 注意：带角色的API使用 character_url 和 character_timestamps，不是character_id
+        # 目前暂不支持带角色生成，所以注释掉
+        # if character_id:
+        #     payload["character_url"] = character_url
+        #     payload["character_timestamps"] = "1,3"  # 默认使用1-3秒
+        #     print(f"[VIDEO GENERATION] 使用角色生成视频")
         
         # 统一使用 /v1/video/create 端点（无论是否有角色）
         api_endpoint = f"{VIDEO_BASE_URL}/v1/video/create"
@@ -483,6 +514,7 @@ async def generate_video_with_ai(prompt: str, images: Optional[List[str]] = None
         
         print(f"[VIDEO GENERATION] Enhanced Prompt: {enhanced_prompt[:200]}...")  # 打印前200个字符
         print(f"[VIDEO GENERATION] API Endpoint: {api_endpoint}")
+        print(f"[VIDEO GENERATION] Payload: {payload}")  # 打印完整payload用于调试
         if character_id:
             print(f"[VIDEO GENERATION] Character ID: {character_id}")
         
@@ -899,6 +931,19 @@ async def generate_video(req: GenerateVideoRequest):
     调用 AI 视频生成服务（Sora）
     支持角色：如果传入character_id，则使用带Character的视频生成API
     """
+    # 打印前端传来的所有参数
+    print("="*80)
+    print("[视频生成] 前端请求参数:")
+    print(f"  prompt: {req.prompt[:100]}..." if len(req.prompt) > 100 else f"  prompt: {req.prompt}")
+    print(f"  images: {req.images}")
+    print(f"  orientation: {req.orientation}")
+    print(f"  size: {req.size} <- 重点检查！")
+    print(f"  duration: {req.duration}")
+    print(f"  watermark: {req.watermark}")
+    print(f"  private: {req.private}")
+    print(f"  character_id: {req.character_id}")
+    print("="*80)
+    
     try:
         # 调用 AI 视频生成
         result = await generate_video_with_ai(
@@ -967,32 +1012,86 @@ async def query_video_task_get(task_id: str):
         
         headers = {
             "Authorization": f"Bearer {VIDEO_API_KEY}",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "Accept": "application/json"
         }
         
-        # 使用统一视频格式的查询endpoint
+        # 根据API文档：https://yunwu.apifox.cn/api-358068905.md
+        # 使用 GET /v1/video/query?id={task_id}
+        api_url = f"{VIDEO_BASE_URL}/v1/video/query"
+        params = {"id": task_id}
+        
+        print(f"[查询任务] 请求URL: {api_url}")
+        print(f"[查询任务] 查询参数: id={task_id}")
+        
         response = requests.get(
-            f"{VIDEO_BASE_URL}/v1/video/generations/{task_id}",
+            api_url,
+            params=params,
             headers=headers,
             timeout=10
         )
         
         print(f"[查询任务] 云雾API响应状态码: {response.status_code}")
+        print(f"[查询任务] 原始响应内容: {response.text}")
         
+        # 如果状态码不是200，返回一个默认的processing状态
         if response.status_code != 200:
             print(f"[查询任务] 云雾API错误: {response.text}")
-            raise HTTPException(
-                status_code=response.status_code,
-                detail=f"查询任务失败: {response.text}"
-            )
+            return {
+                "id": task_id,
+                "status": "processing",
+                "progress": 10,
+                "message": f"查询错误: {response.status_code}"
+            }
         
-        result = response.json()
-        print(f"[查询任务] 返回数据: status={result.get('status')}, progress={result.get('progress')}")
-        return result
+        # 解析JSON
+        try:
+            result = response.json()
+            print(f"[查询任务] ✅ 成功获取数据: {result}")
+            print(f"[查询任务] status={result.get('status')}, video_url={result.get('video_url')}")
+            
+            # 根据API文档，返回字段包括：
+            # - id: 任务ID
+            # - status: 状态 (queued, processing, completed, failed)
+            # - video_url: 视频URL（完成时有值）
+            # - enhanced_prompt: 增强后prompt
+            # - status_update_time: 状态更新时间
+            
+            # 检查是否完成
+            if result.get('video_url'):
+                result['status'] = 'completed'
+                result['progress'] = 100
+                print(f"[查询任务] 检测到video_url，标记为完成")
+            elif result.get('status') == 'failed':
+                result['progress'] = 0
+                print(f"[查询任务] 任务失败")
+            elif result.get('status') == 'processing' or result.get('status') == 'queued':
+                # 根据状态设置进度
+                if result.get('status') == 'queued':
+                    result['progress'] = 5
+                else:
+                    result['progress'] = 50
+                print(f"[查询任务] 任务处理中: {result.get('status')}")
+            
+            return result
+            
+        except Exception as json_error:
+            print(f"[查询任务] JSON解析失败: {json_error}")
+            return {
+                "id": task_id,
+                "status": "processing",
+                "progress": 15,
+                "message": "JSON解析失败"
+            }
         
     except requests.RequestException as e:
         print(f"[查询任务] 请求异常: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"查询失败: {str(e)}")
+        return {
+            "id": task_id,
+            "status": "processing",
+            "progress": 20,
+            "message": f"网络错误: {str(e)}"
+        }
 
 
 @app.post("/api/generate-character")

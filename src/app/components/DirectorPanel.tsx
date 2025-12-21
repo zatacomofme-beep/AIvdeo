@@ -159,13 +159,13 @@ export function DirectorPanel() {
     try {
       // 调用后端API生成视频
       const result = await api.generateVideo({
-        script: script,
+        script: script,  // 脚本已经包含角色信息（通过AI生成脚本时整合）
         productImages: uploadedImages ? uploadedImages : [],
         orientation: configForm.orientation,
         resolution: configForm.resolution,
         duration: parseInt(configForm.duration),
-        language: configForm.language,
-        characterId: selectedCharacter?.id  // 新增：传递角色ID
+        language: configForm.language
+        // 移除 characterId - 角色信息已在脚本生成时整合（见handleGenerateScript）
       });
       
       // 立即添加到视频列表

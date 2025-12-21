@@ -229,7 +229,7 @@ const status = await api.queryVideoTask(taskId);
 
 使用 Zustand 进行全局状态管理：
 
-```typescript
+```
 // 主要状态
 - uploadedImage: 上传的图片URL
 - currentStep: 当前步骤 (1/2/3)
@@ -304,3 +304,154 @@ MIT License
 
 **技术栈**: React 18 + TypeScript + Tailwind CSS v4 + Zustand + FastAPI
 **最后更新**: 2024年12月
+
+# AIvdeo - AI 视频创作平台
+
+基于 AI 的智能视频创作平台，支持商品视频生成、角色创作、脚本编写等功能。
+
+## ✨ 功能特性
+
+- 🎬 **AI 视频生成** - 基于 Sora 2 模型的视频生成
+- 🎭 **角色创作** - 自定义 AI 角色
+- 📝 **智能脚本** - AI 辅助脚本生成
+- 🛍️ **商品管理** - 商品信息管理和展示
+- 💾 **数据持久化** - PostgreSQL 数据库存储
+- 🔐 **用户系统** - 用户注册、登录、积分管理
+
+## 🛠️ 技术栈
+
+### 前端
+- React 18
+- TypeScript
+- Vite
+- TailwindCSS
+- Zustand (状态管理)
+- Lucide React (图标)
+
+### 后端
+- Python 3.8+
+- FastAPI
+- SQLAlchemy (ORM)
+- PostgreSQL
+- OpenAI API
+- 火山云 TOS (对象存储)
+
+## 📦 项目结构
+
+```
+AIvdeo/
+├── src/                    # 前端源码
+│   ├── app/
+│   │   ├── components/    # React 组件
+│   │   ├── lib/          # 工具库
+│   │   └── assets/       # 静态资源
+│   └── main.tsx          # 入口文件
+├── backend/               # 后端源码
+│   ├── main.py           # FastAPI 主文件
+│   ├── database.py       # 数据库模型
+│   ├── prompts.py        # AI 提示词
+│   └── requirements.txt  # Python 依赖
+└── public/               # 公共资源
+```
+
+## 🚀 快速开始
+
+### 前端部署
+
+```bash
+# 安装依赖
+npm install
+
+# 开发模式
+npm run dev
+
+# 生产构建
+npm run build
+```
+
+### 后端部署
+
+```bash
+cd backend
+
+# 安装依赖
+pip install -r requirements.txt
+
+# 配置环境变量
+cp .env.example .env
+# 编辑 .env 填写配置
+
+# 初始化数据库
+python3 init_db.py
+
+# 启动服务
+uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+## 🗄️ 数据库配置
+
+项目使用 PostgreSQL 数据库，包含以下表：
+
+- `users` - 用户表
+- `products` - 商品表
+- `projects` - 项目表
+- `videos` - 视频表
+- `characters` - 角色表
+- `saved_prompts` - 提示词表
+- `credit_history` - 积分历史表
+
+详细配置请参考 `backend/DATABASE_SETUP.md`
+
+## 🔑 环境变量配置
+
+### 后端 `.env` 配置
+
+``env
+# 数据库配置
+DB_HOST=your_database_host
+DB_PORT=5432
+DB_NAME=AIvdeo
+DB_USER=your_username
+DB_PASSWORD=your_password
+
+# TOS 对象存储
+TOS_ACCESS_KEY=your_access_key
+TOS_SECRET_KEY=your_secret_key
+TOS_BUCKET=your_bucket
+TOS_REGION=cn-beijing
+
+# AI 服务
+LLM_API_KEY=your_llm_api_key
+VIDEO_GENERATION_API_KEY=your_video_api_key
+CHARACTER_VIDEO_API_KEY=your_character_api_key
+```
+
+## 📝 开发指南
+
+### 前端开发
+
+1. 组件位于 `src/app/components/`
+2. 状态管理使用 Zustand，定义在 `src/app/lib/store.ts`
+3. API 调用封装在 `src/app/lib/api.ts`
+
+### 后端开发
+
+1. API 路由定义在 `backend/main.py`
+2. 数据库模型在 `backend/database.py`
+3. AI 提示词在 `backend/prompts.py`
+
+## 🤝 贡献
+
+欢迎提交 Issue 和 Pull Request！
+
+## 📄 许可证
+
+MIT License
+
+## 👥 作者
+
+AIvdeo Team
+
+---
+
+**注意**：本项目仅供学习和研究使用。

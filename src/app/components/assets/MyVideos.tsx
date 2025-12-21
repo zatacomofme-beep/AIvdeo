@@ -1,54 +1,167 @@
-import React, { useEffect } from 'react';
-import { Play, Download, Trash2, Clock, Film, Loader2, CheckCircle2, XCircle, AlertCircle, AlertTriangle } from 'lucide-react';
+import { Play, Download, Trash2, Clock, Film, Loader2, CheckCircle2, XCircle, AlertCircle, AlertTriangle, RefreshCw } from 'lucide-react';
 import { useStore } from '../../lib/store';
 import { cn } from '../../lib/utils';
 import { api } from '../../lib/api';
+import { useEffect, useState } from 'react';
 
 export function MyVideos() {
   const { myVideos, deleteVideo, updateVideoStatus } = useStore();
+  
+  // 跟踪每个视频的上次查询时间（3分钟冷却）
+  const [lastQueryTime, setLastQueryTime] = useState<{ [key: string]: number }>({});
+  const [querying, setQuerying] = useState<{ [key: string]: boolean }>({});
+
+  // 手动查询视频状态
+  const handleManualQuery = async (video: any) => {
+    const now = Date.now();
+    const lastTime = lastQueryTime[video.id] || 0;
+    const cooldown = 3 * 60 * 1000; // 3分钟
+    
+    // 检查冷却时间
+    if (now - lastTime < cooldown) {
+      const remainingSeconds = Math.ceil((cooldown - (now - lastTime)) / 1000);
+      alert(`请等待 ${Math.floor(remainingSeconds / 60)} 分 ${remainingSeconds % 60} 秒后再查询`);
+      return;
+    }
+
+    setQuerying({ ...querying, [video.id]: true });
+    
+    try {
+      console.log(`[手动查询] 视频${video.id}`);
+      const status = await api.queryVideoTask(video.taskId!);
+      console.log(`[手动查询] 视频${video.id}状态:`, status);
+      
+      // 更新进度
+      if (status.progress !== undefined && typeof status.progress === 'number') {
+        updateVideoStatus(video.id, { progress: status.progress });
+      }
+      
+      // 检查任务状态
+      if (status.status === 'completed') {
+        console.log(`[完成] 视频${video.id}生成完成`);
+        updateVideoStatus(video.id, {
+          status: 'completed',
+          url: status.video_url || status.url || video.url,
+          thumbnail: status.thumbnail || video.thumbnail,
+          progress: 100
+        });
+        alert('✅ 视频生成完成！');
+      } else if (status.status === 'failed') {
+        console.error(`[失败] 视频${video.id}生成失败:`, status.error);
+        updateVideoStatus(video.id, {
+          status: 'failed',
+          error: status.error || status.message || '生成失败'
+        });
+        alert(`❌ 视频生成失败: ${status.error || '未知错误'}`);
+      } else {
+        alert(`🔄 视频仍在生成中，进度: ${status.progress || 0}%`);
+      }
+      
+      // 更新最后查询时间
+      setLastQueryTime({ ...lastQueryTime, [video.id]: now });
+    } catch (error) {
+      console.error(`手动查询失败:`, error);
+      alert('⚠️ 查询失败，请稍后再试');
+    } finally {
+      setQuerying({ ...querying, [video.id]: false });
+    }
+  };
 
   // 轮询处理中的视频状态
+  // 优化策略：5分钟、10分钟、15分钟、20分钟各查询一次，完成或失败后停止
   useEffect(() => {
     const processingVideos = myVideos.filter(v => v.status === 'processing' && v.taskId);
     
     if (processingVideos.length === 0) return;
 
-    const pollInterval = setInterval(async () => {
-      for (const video of processingVideos) {
-        try {
-          const status = await api.queryVideoTask(video.taskId!);
-          
-          console.log(`[轮询] 视频${video.id}状态:`, status);
-          
-          // 更新进度
-          if (status.progress !== undefined && typeof status.progress === 'number') {
-            updateVideoStatus(video.id, { progress: status.progress });
-          }
-          
-          // 检查任务状态
-          if (status.status === 'completed') {
-            console.log(`[完成] 视频${video.id}生成完成`);
-            updateVideoStatus(video.id, {
-              status: 'completed',
-              url: status.video_url || status.url || video.url,
-              thumbnail: status.thumbnail || video.thumbnail,
-              progress: 100
-            });
-          } else if (status.status === 'failed') {
-            console.error(`[失败] 视频${video.id}生成失败:`, status.error);
+    const timers: NodeJS.Timeout[] = [];
+
+    // 定义查询函数
+    const queryVideo = async (video: any, attemptNumber: number) => {
+      try {
+        console.log(`[自动查询${attemptNumber}] 视频${video.id} - ${attemptNumber * 5}分钟后查询`);
+        const status = await api.queryVideoTask(video.taskId!);
+        console.log(`[自动查询${attemptNumber}] 视频${video.id}状态:`, status);
+        
+        // 更新进度
+        if (status.progress !== undefined && typeof status.progress === 'number') {
+          updateVideoStatus(video.id, { progress: status.progress });
+        }
+        
+        // 检查任务状态
+        if (status.status === 'completed') {
+          console.log(`[完成] 视频${video.id}生成完成`);
+          updateVideoStatus(video.id, {
+            status: 'completed',
+            url: status.video_url || status.url || video.url,
+            thumbnail: status.thumbnail || video.thumbnail,
+            progress: 100
+          });
+          return true; // 返回true表示已完成，停止后续查询
+        } else if (status.status === 'failed') {
+          console.error(`[失败] 视频${video.id}生成失败:`, status.error);
+          updateVideoStatus(video.id, {
+            status: 'failed',
+            error: status.error || status.message || '生成失败'
+          });
+          return true; // 返回true表示已失败，停止后续查询
+        }
+        return false; // 继续查询
+      } catch (error) {
+        console.error(`查询视频${video.id}状态失败:`, error);
+        return false; // 查询失败，继续尝试下次查询
+      }
+    };
+
+    for (const video of processingVideos) {
+      let isFinished = false; // 标记视频是否已完成
+
+      // 5分钟后第1次查询
+      const timer1 = setTimeout(async () => {
+        if (!isFinished) {
+          isFinished = await queryVideo(video, 1);
+        }
+      }, 5 * 60 * 1000); // 5分钟
+      timers.push(timer1);
+
+      // 10分钟后第2次查询
+      const timer2 = setTimeout(async () => {
+        if (!isFinished) {
+          isFinished = await queryVideo(video, 2);
+        }
+      }, 10 * 60 * 1000); // 10分钟
+      timers.push(timer2);
+
+      // 15分钟后第3次查询
+      const timer3 = setTimeout(async () => {
+        if (!isFinished) {
+          isFinished = await queryVideo(video, 3);
+        }
+      }, 15 * 60 * 1000); // 15分钟
+      timers.push(timer3);
+
+      // 20分钟后第4次查询（最后一次）
+      const timer4 = setTimeout(async () => {
+        if (!isFinished) {
+          const finished = await queryVideo(video, 4);
+          // 如果20分钟后还没完成，标记为超时失败
+          if (!finished) {
+            console.log(`[超时] 视频${video.id} 20分钟后仍在处理中，标记为失败`);
             updateVideoStatus(video.id, {
               status: 'failed',
-              error: status.error || status.message || '生成失败'
+              error: '视频生成超时（超过20分钟）',
+              progress: 0
             });
           }
-        } catch (error) {
-          console.error(`查询视频${video.id}状态失败:`, error);
-          // 不立即标记为失败，继续轮询
         }
-      }
-    }, 3000); // 每3秒轮询一次
+      }, 20 * 60 * 1000); // 20分钟
+      timers.push(timer4);
+    }
 
-    return () => clearInterval(pollInterval);
+    return () => {
+      // 清理所有定时器
+      timers.forEach(timer => clearTimeout(timer));
+    };
   }, [myVideos, updateVideoStatus]);
 
   const formatDate = (timestamp: number) => {
@@ -122,7 +235,7 @@ export function MyVideos() {
             <p className="text-sm mt-2">快去 AI 导演创作您的第一个视频吧</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
             {myVideos.map((video) => (
               <div 
                 key={video.id} 
@@ -212,6 +325,28 @@ export function MyVideos() {
                       </span>
                     )}
                   </div>
+                  {/* 处理中的视频显示手动查询按钮 */}
+                  {video.status === 'processing' && (
+                    <>
+                      <button
+                        onClick={() => handleManualQuery(video)}
+                        disabled={querying[video.id]}
+                        className="mt-2 w-full flex items-center justify-center gap-2 px-3 py-2 bg-cyan-50 hover:bg-cyan-100 text-cyan-700 text-xs font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-cyan-200"
+                      >
+                        {querying[video.id] ? (
+                          <>
+                            <Loader2 size={14} className="animate-spin" />
+                            查询中...
+                          </>
+                        ) : (
+                          <>
+                            <RefreshCw size={14} />
+                            刷新
+                          </>
+                        )}
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             ))}

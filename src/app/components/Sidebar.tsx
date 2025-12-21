@@ -42,9 +42,10 @@ export function Sidebar({
 }: SidebarProps) {
   const { user, isLoggedIn, credits, myVideos, myPrompts, savedProducts, myCharacters } = useStore();
   const [assetsExpanded, setAssetsExpanded] = useState(true);
+  const [workspaceExpanded, setWorkspaceExpanded] = useState(true);
   
   const navItems = [
-    { id: 'video', icon: Video, label: 'AI 视频导演' },
+    { id: 'video', icon: Video, label: '开始创作' },
     { id: 'square', icon: Globe, label: '内容广场' },
     // 管理员才能看到
     ...(user?.role === 'admin' ? [
@@ -54,7 +55,7 @@ export function Sidebar({
 
   const assetItems = [
     { id: 'my-videos', icon: Film, label: '我的视频', count: myVideos.length },
-    { id: 'my-prompts', icon: MessageSquare, label: '我的提示词', count: myPrompts.length },
+    { id: 'my-prompts', icon: MessageSquare, label: '提示词库', count: myPrompts.length },
     { id: 'my-products', icon: Package, label: '我的商品', count: savedProducts.length },
     { id: 'my-characters', icon: Users, label: '我的角色', count: myCharacters.length },
   ];
@@ -99,30 +100,41 @@ export function Sidebar({
 
       {/* Main Navigation */}
       <nav className="flex-1 py-6 px-4 overflow-y-auto custom-scrollbar">
-        {/* 主导航 */}
-        <div className="space-y-2 mb-8">
-          <div className="px-3 text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Workspace</div>
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeTab === item.id;
-            
-            return (
-              <button
-                key={item.id}
-                onClick={() => onTabChange?.(item.id)}
-                className={cn(
-                  "w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm transition-all group relative overflow-hidden",
-                  isActive 
-                    ? "text-cyan-700 bg-cyan-50 border border-cyan-100" 
-                    : "text-slate-500 hover:text-slate-900 hover:bg-slate-100/50"
-                )}
-              >
-                {isActive && <div className="absolute left-0 top-0 bottom-0 w-1 bg-cyan-500 rounded-full" />}
-                <Icon size={20} className={cn("shrink-0 transition-colors", isActive ? "text-cyan-600" : "text-slate-400 group-hover:text-slate-600")} />
-                <span className="truncate font-medium">{item.label}</span>
-              </button>
-            );
-          })}
+        {/* 创作中心 */}
+        <div className="mb-8">
+          <button
+            onClick={() => setWorkspaceExpanded(!workspaceExpanded)}
+            className="w-full px-3 py-2.5 bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 text-white rounded-lg flex items-center justify-center gap-2 transition-all text-sm font-bold shadow-md shadow-yellow-500/20 hover:shadow-yellow-500/30 mb-2"
+          >
+            {workspaceExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            <span>创作中心</span>
+          </button>
+          
+          {workspaceExpanded && (
+            <div className="space-y-2 animate-in slide-in-from-left-5 duration-300">
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = activeTab === item.id;
+                
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => onTabChange?.(item.id)}
+                    className={cn(
+                      "w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm transition-all group relative overflow-hidden",
+                      isActive 
+                        ? "text-cyan-700 bg-cyan-50 border border-cyan-100" 
+                        : "text-slate-500 hover:text-slate-900 hover:bg-slate-100/50"
+                    )}
+                  >
+                    {isActive && <div className="absolute left-0 top-0 bottom-0 w-1 bg-cyan-500 rounded-full" />}
+                    <Icon size={20} className={cn("shrink-0 transition-colors", isActive ? "text-cyan-600" : "text-slate-400 group-hover:text-slate-600")} />
+                    <span className="truncate font-medium">{item.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* 我的资产 */}
@@ -130,7 +142,7 @@ export function Sidebar({
           <div className="mt-2">
             <button
               onClick={() => setAssetsExpanded(!assetsExpanded)}
-              className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-slate-400 hover:text-slate-700 transition-colors uppercase tracking-wider mb-2"
+              className="w-full px-3 py-2.5 bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 text-white rounded-lg flex items-center justify-center gap-2 transition-all text-sm font-bold shadow-md shadow-yellow-500/20 hover:shadow-yellow-500/30 mb-2"
             >
               {assetsExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
               <span>我的资产</span>

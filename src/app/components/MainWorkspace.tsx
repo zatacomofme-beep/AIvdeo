@@ -20,7 +20,7 @@ export function MainWorkspace() {
         <div className="w-full max-w-4xl">
           {/* Title */}
           <h1 className="text-5xl font-bold mb-8 text-center text-transparent bg-clip-text bg-gradient-to-r from-blue-600 via-purple-600 to-cyan-600 animate-pulse drop-shadow-sm">
-            AI 视频导演
+            新的素材获取方式
             <span className="block text-xl font-normal text-slate-500 mt-2 tracking-widest uppercase">Create Professional Videos with AI</span>
           </h1>
 
