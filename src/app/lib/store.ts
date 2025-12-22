@@ -315,13 +315,20 @@ export const useStore = create<AppStore>()(persist((set) => ({
   name: 'app-store',
   partialize: (state) => ({
     // 只持久化这些字段，排除大型数据
-    user: state.user,
+    user: state.user,        // user对象包含credits，不需要单独持久化
     isLoggedIn: state.isLoggedIn,
-    credits: state.credits,
+    // ❗ 删除 credits 的单独持久化，避免与 user.credits 冲突
     savedProducts: state.savedProducts,
     myVideos: state.myVideos,
     myPrompts: state.myPrompts,
     myCharacters: state.myCharacters,
     // 不持久化 uploadedImages, imagesBase64, videoUrl 等大型数据
-  })
-}));
+  }),
+  onRehydrateStorage: () => (state) => {
+    // persist恢复后，从 user.credits 同步到 store.credits
+    if (state && state.user && state.user.credits !== undefined) {
+      state.credits = state.user.credits;
+      console.log('[Store] Persist恢复，同步积分:', state.credits);
+    }
+  }
+});
