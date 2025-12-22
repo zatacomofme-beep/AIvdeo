@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Mail, Lock, User, Eye, EyeOff } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -17,6 +17,17 @@ export function LoginModal({ isOpen, onClose, onLogin, onRegister }: LoginModalP
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
+  // 当弹窗关闭时，重置状态
+  useEffect(() => {
+    if (!isOpen) {
+      setIsLoading(false);
+      setEmail('');
+      setPassword('');
+      setUsername('');
+      setShowPassword(false);
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -29,11 +40,9 @@ export function LoginModal({ isOpen, onClose, onLogin, onRegister }: LoginModalP
       } else {
         await onRegister(email, password, username);
       }
-      // 清空表单
-      setEmail('');
-      setPassword('');
-      setUsername('');
-    } finally {
+      // 注意：不在这里清空表单，由 useEffect 在弹窗关闭时处理
+    } catch (error) {
+      // 如果出错，重置 loading 状态
       setIsLoading(false);
     }
   };

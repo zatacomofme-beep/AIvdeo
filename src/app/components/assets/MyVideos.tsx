@@ -1,7 +1,7 @@
 import { Play, Download, Trash2, Clock, Film, Loader2, CheckCircle2, XCircle, AlertCircle, AlertTriangle, RefreshCw } from 'lucide-react';
-import { useStore } from '../../lib/store';
-import { cn } from '../../lib/utils';
-import { api } from '../../lib/api';
+import { useStore } from "../../lib/store";
+import { cn } from "../../lib/utils";
+import { api } from '../../../lib/api';
 import { useEffect, useState } from 'react';
 
 export function MyVideos() {

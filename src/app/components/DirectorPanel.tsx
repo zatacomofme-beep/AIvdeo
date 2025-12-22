@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { X, Sparkles, Loader2, ChevronRight, ChevronLeft, Wand2, Users, Plus, ShoppingBag } from 'lucide-react';
 import { useStore } from '../lib/store';
 import { cn } from '../lib/utils';
-import { api } from '../lib/api';
+import { api } from '../../lib/api';
 import { CharacterSelector } from './CharacterSelector';
+import { showToast } from '../lib/toast-utils';
 
 const API_BASE_URL = 'http://115.190.137.87:8000';
 
@@ -30,14 +31,16 @@ export function DirectorPanel() {
     videoCount,
     setVideoCount,
     deductCredits,
-    credits,  // 新增：导入credits
+    setCredits,
+    credits,
+    user,
     myCharacters,
     addCharacter,
     selectedCharacter,
     setSelectedCharacter,
     addGeneratedVideo,
     setShowCreateProduct,
-    savePrompt  // 新增：导入savePrompt方法
+    savePrompt
   } = useStore();
   
   // 视频任务轮询状态
@@ -57,7 +60,7 @@ export function DirectorPanel() {
     country: videoConfig?.country || '',
     language: videoConfig?.language || '',
     style: videoConfig?.style || '', // 新增：视频风格
-    orientation: videoConfig?.orientation || 'vertical' as 'horizontal' | 'vertical',
+    orientation: videoConfig?.orientation || 'portrait' as 'portrait' | 'landscape',  // ✅ 使用portrait/landscape
     resolution: videoConfig?.resolution || '1080p' as '720p' | '1080p',
     duration: videoConfig?.duration || '15s' as '15s' | '25s'
   });
@@ -71,7 +74,7 @@ export function DirectorPanel() {
 
   const handleSaveConfig = () => {
     if (!configForm.country || !configForm.language) {
-      alert('请填写必填项：投放国家和视频语言');
+      showToast.warning('请填写必填项', '投放国家和视频语言');
       return;
     }
 
@@ -80,9 +83,8 @@ export function DirectorPanel() {
   };
 
   const handleGenerateScript = async () => {
-    // 检查积分是否足够
     if (credits < 30) {
-      alert('❌ 积分不足！\n\n生成脚本需要30 Credits\n您当前积分：' + credits + ' Credits\n\n请先充值后再试');
+      showToast.error('积分不足', `生成脚本需要30 Credits\n您当前积分：${credits} Credits\n\n请先充值后再试`);
       return;
     }
     
@@ -122,21 +124,42 @@ export function DirectorPanel() {
         .join('\n\n');
       
       setScript(scriptText);
-      
-      // ✅ 扣除脚本生成积分
-      deductCredits(30);
-      
+            
+      // ✅ 调用后端API扣除积分
+      console.log('[DirectorPanel] 准备扣除积分 - user:', user);
+      console.log('[DirectorPanel] 准备扣除积分 - credits:', credits);
+      if (user) {
+        try {
+          const result = await api.consumeCredits({
+            user_id: user.id,
+            amount: 30,
+            action: '生成脚本',
+            description: `生成${configForm.duration}${configForm.language}脚本`
+          });
+          console.log('[DirectorPanel] API返回积分:', result.credits);
+          // 更新本地状态为最新积分
+          setCredits(result.credits);
+        } catch (error) {
+          console.error('积分扣除失败:', error);
+          console.error('积分扣除失败详情:', error instanceof Error ? error.message : error);
+          // 失败也继续，只是本地扣除
+          deductCredits(30);
+        }
+      } else {
+        console.warn('[DirectorPanel] user为null，无法调用积分API！');
+        deductCredits(30);
+      }
+            
       // ✅ 保存提示词到“我的提示词”
       savePrompt({
         productName: currentProduct?.name || '未命名产品',
         content: scriptText
       });
-      
-      // 显示成功提示
-      alert('✅ 脚本生成成功！\n\n扣除30 Credits\n剩余积分：' + (credits - 30) + ' Credits\n\n已自动保存到“我的提示词”');
+            
+      showToast.success('脚本生成成功', `扣陆30 Credits\n剩余积分：${credits - 30} Credits\n\n已自动保存到“我的提示词”`);
     } catch (error) {
       console.error('脚本生成失败:', error);
-      alert(`❌ 脚本生成失败\n\n${error instanceof Error ? error.message : '请稍后重试'}`);
+      showToast.error('脚本生成失败', error instanceof Error ? error.message : '请稍后重试');
     } finally {
       setGeneratingScript(false);
     }
@@ -144,29 +167,46 @@ export function DirectorPanel() {
 
   const handleGenerate = async () => {
     if (!script.trim()) {
-      alert('请输入或生成脚本');
+      showToast.warning('请输入或生成脚本', '');
       return;
     }
 
-    // 检查积分是否足够
     if (credits < 70) {
-      alert('❌ 积分不足！\n\n生成视频需要70 Credits\n您当前积分：' + credits + ' Credits\n\n请先充值后再试');
+      showToast.error('积分不足', `生成视频需要70 Credits\n您当前积分：${credits} Credits\n\n请先充值后再试`);
       return;
     }
 
     setGenerating(true);
     
     try {
+      // 验证参数
+      const duration = parseInt(configForm.duration.replace('s', ''));
+      console.log('[视频生成] 参数验证:');
+      console.log('  - script长度:', script.length);
+      console.log('  - images数量:', uploadedImages?.length || 0);
+      console.log('  - orientation:', configForm.orientation);
+      console.log('  - duration:', duration, '(类型:', typeof duration, ')');
+      
+      if (!script || script.trim().length === 0) {
+        showToast.error('脚本内容不能为空', '');
+        setGenerating(false);
+        return;
+      }
+      
+      if (isNaN(duration) || duration <= 0) {
+        showToast.error('视频时长参数错误', '');
+        setGenerating(false);
+        return;
+      }
+      
       // 调用后端API生成视频
-      const result = await api.generateVideo({
-        script: script,  // 脚本已经包含角色信息（通过AI生成脚本时整合）
-        productImages: uploadedImages ? uploadedImages : [],
-        orientation: configForm.orientation,
-        resolution: configForm.resolution,
-        duration: parseInt(configForm.duration),
-        language: configForm.language
-        // 移除 characterId - 角色信息已在脚本生成时整合（见handleGenerateScript）
-      });
+      const result = await api.generateVideo(
+        script,  // prompt
+        uploadedImages || [],  // images
+        configForm.orientation,  // orientation (portrait/landscape)
+        configForm.resolution === '720p' ? 'small' : 'large',  // size
+        duration  // duration
+      );
       
       // 立即添加到视频列表
       const videoId = addGeneratedVideo({
@@ -180,28 +220,52 @@ export function DirectorPanel() {
       });
       
       if (result.status === 'completed' && result.url) {
-        // 视频立即完成
-        deductCredits(70);  // 扣除70 Credits
+        // 视频立即完成，调用后端API扣除积分
+        if (user) {
+          try {
+            const creditResult = await api.consumeCredits({
+              user_id: user.id,
+              amount: 70,
+              action: '生成视频',
+              description: `生成${duration}秒${configForm.orientation}视频`
+            });
+            setCredits(creditResult.credits);
+          } catch (error) {
+            console.error('积分扣除失败:', error);
+            deductCredits(70);
+          }
+        }
         alert(`✅ 视频生成成功！
 
-扣除70 Credits
+扣陉70 Credits
 剩余积分：${credits - 70} Credits
 
-视频已添加到"我的视频"`);
+视频已添加到“我的视频”`);
         setGenerating(false);
         setShowDirector(false);
       } else if (result.task_id) {
-        // 需要轮询任务状态
+        // 需要轮询任务状态，先扣除积分
+        if (user) {
+          try {
+            const creditResult = await api.consumeCredits({
+              user_id: user.id,
+              amount: 70,
+              action: '生成视频',
+              description: `生成${duration}秒${configForm.orientation}视频`
+            });
+            setCredits(creditResult.credits);
+          } catch (error) {
+            console.error('积分扣除失败:', error);
+            deductCredits(70);
+          }
+        }
         setVideoTaskId(result.task_id);
-        // 先扣除积分
-        deductCredits(70);
         alert(`✅ 视频已开始生成！
 
-扣除70 Credits
+扣陉70 Credits
 剩余积分：${credits - 70} Credits
 
-请到"我的视频"页面查看生成进度`);
-        // 不在这里轮询，MyVideos组件会自动轮询
+请到“我的视频”页面查看生成进度`);
         setGenerating(false);
         setShowDirector(false);
       }
@@ -537,25 +601,25 @@ export function DirectorPanel() {
                 </label>
                 <div className="grid grid-cols-2 gap-4">
                   <button
-                    onClick={() => setConfigForm({ ...configForm, orientation: 'vertical' })}
+                    onClick={() => setConfigForm({ ...configForm, orientation: 'portrait' })}
                     className={cn(
                       "px-4 py-4 border-2 rounded-xl transition-all text-center relative overflow-hidden group",
-                      configForm.orientation === 'vertical'
+                      configForm.orientation === 'portrait'
                         ? "border-yellow-400 bg-yellow-50 text-slate-900 shadow-sm"
                         : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 text-slate-600"
                     )}
                   >
                     <div className="text-base font-bold mb-1">📱 竖屏</div>
                     <div className="text-xs text-slate-500">9:16 (TikTok/Shorts)</div>
-                    {configForm.orientation === 'vertical' && (
+                    {configForm.orientation === 'portrait' && (
                       <div className="absolute inset-0 bg-yellow-400/5 pointer-events-none" />
                     )}
                   </button>
                   <button
-                    onClick={() => setConfigForm({ ...configForm, orientation: 'horizontal' })}
+                    onClick={() => setConfigForm({ ...configForm, orientation: 'landscape' })}
                     className={cn(
                       "px-4 py-4 border-2 rounded-xl transition-all text-center relative overflow-hidden group",
-                      configForm.orientation === 'horizontal'
+                      configForm.orientation === 'landscape'
                         ? "border-yellow-400 bg-yellow-50 text-slate-900 shadow-sm"
                         : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 text-slate-600"
                     )}

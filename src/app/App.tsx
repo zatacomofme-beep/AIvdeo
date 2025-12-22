@@ -12,35 +12,60 @@ import { MyPrompts } from './components/assets/MyPrompts';
 import { MyProducts } from './components/assets/MyProducts';
 import { MyCharacters } from './components/assets/MyCharacters';
 import { ContentSquare } from './components/ContentSquare';
-import { AdminPanel } from './components/AdminPanel';  // 新增：管理员面板
+import { AdminPanel } from './components/AdminPanel';
 import { useStore } from './lib/store';
-import { useAuthStore } from '../lib/store';  // 新增：导入 useAuthStore
-import { api } from '../lib/api';  // 导入 api
+import { api } from '../lib/api';
+import { ToastProvider, useToast } from './components/ui/toast';
 
-export default function App() {
+function AppContent() {
   const [activeTab, setActiveTab] = React.useState('video');
   const [showLogin, setShowLogin] = React.useState(false);
   const [showUserCenter, setShowUserCenter] = React.useState(false);
   const [showRecharge, setShowRecharge] = React.useState(false);
   
-  const { login, register, logout, addCredits } = useAuthStore();  // 使用 useAuthStore
+  const { login, register, logout, addCredits } = useStore();
+  const toast = useToast();
 
   const handleLogin = async (email: string, password: string) => {
+    console.log('[handleLogin] 开始执行...');
     try {
       // 调用后端 API 进行登录
+      console.log('[handleLogin] 调用 API...');
       const response = await api.login({ email, password });
+      console.log('[handleLogin] API 返回成功:', response);
       
-      // 登录成功，保存用户信息到 store
-      login(response.user);
+      // 登录成功后，主动拉取最新积分余额（容错处理）
+      let finalCredits = response.user.credits;  // 默认使用登录返回的积分
+      console.log('[handleLogin] 拉取最新积分...');
+      const balanceResponse = await api.getCreditsBalance(response.user.id);
+      if (balanceResponse) {
+        console.log('[handleLogin] 最新积分:', balanceResponse.credits);
+        finalCredits = balanceResponse.credits;
+      } else {
+        console.warn('[handleLogin] 积分API返回null，使用登录返回的积分');
+      }
+      
+      // 保存用户信息到 store（使用最新积分）
+      console.log('[handleLogin] 保存用户信息...');
+      login({
+        ...response.user,
+        credits: finalCredits  // 使用从数据库拉取的最新积分（或登录返回的积分）
+      });
+      
+      // 先关闭弹窗，然后显示提示
+      console.log('[handleLogin] 关闭弹窗...');
       setShowLogin(false);
       
       if (response.user.role === 'admin') {
-        alert('✅ 管理员登录成功！\n\n您现在可以访问：\n• 管理员控制台（侧边栏）\n• 用户管理\n• 视频审核\n• 提示词管理');
+        toast.success('管理员登录成功', '您现在可以访问：\n• 管理员控制台（侧边栏）\n• 用户管理\n• 视频审核\n• 提示词管理');
       } else {
-        alert(`✅ 登录成功！\n\n欢迎回来，${response.user.username}！\n当前积分：${response.user.credits}`);
+        toast.success('登录成功', `欢迎回来，${response.user.username}！\n当前积分：${finalCredits}`);
       }
+      
+      console.log('[handleLogin] 登录流程完成');
     } catch (error) {
-      alert(`❌ 登录失败\n\n${error instanceof Error ? error.message : '请稍后重试'}`);
+      console.error('[handleLogin] 错误:', error);
+      toast.error('登录失败', error instanceof Error ? error.message : '请稍后重试');
     }
   };
 
@@ -51,22 +76,18 @@ export default function App() {
       
       // 注册成功，保存用户信息到 store
       register(response.user);
-      setShowLogin(false);
       
-      alert(`✅ 注册成功！
-
-${response.message}
-用户ID：${response.user.id}
-初始积分：${response.user.credits}`);
+      setShowLogin(false);
+      toast.success('注册成功', `${response.message}\n用户ID：${response.user.id}\n初始积分：${response.user.credits}`);
     } catch (error) {
-      alert(`❌ 注册失败\n\n${error instanceof Error ? error.message : '请稍后重试'}`);
+      toast.error('注册失败', error instanceof Error ? error.message : '请稍后重试');
     }
   };
 
   const handleLogout = () => {
     logout();
     setShowUserCenter(false);
-    alert('已退出登录');
+    toast.info('已退出登录', '');
   };
 
   const handleRecharge = (amount: number, credits: number, method: string) => {
@@ -153,5 +174,13 @@ ${response.message}
         onRecharge={handleRecharge}
       />
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <ToastProvider>
+      <AppContent />
+    </ToastProvider>
   );
 }

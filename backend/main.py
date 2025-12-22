@@ -12,7 +12,9 @@ from io import BytesIO
 from datetime import datetime
 
 import boto3
-from fastapi import FastAPI, File, UploadFile, HTTPException, Depends
+from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.openapi.docs import get_swagger_ui_html
@@ -267,6 +269,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 添加Pydantic验证错误处理
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    print("="*80)
+    print("[❗ 422错误] Pydantic验证失败:")
+    print(f"  请求路径: {request.url.path}")
+    print(f"  请求方法: {request.method}")
+    print(f"  错误详情:")
+    for error in exc.errors():
+        print(f"    - 字段: {error['loc']}")
+        print(f"      类型: {error['type']}")
+        print(f"      消息: {error['msg']}")
+        if 'input' in error:
+            print(f"      输入值: {error['input']}")
+    print("="*80)
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors(), "body": str(exc.body)}
+    )
+
 @app.get("/docs", include_in_schema=False)
 def fallback_docs():
     """
@@ -520,7 +542,7 @@ async def generate_video_with_ai(prompt: str, images: Optional[List[str]] = None
             "images": images if images else [],
             "orientation": orientation,  # portrait 或 landscape
             "size": size,  # 使用前端传来的size（small或large）
-            "duration": 15,  # 整数15
+            "duration": duration,  # ✅ 使用前端传入的duration（15或25）
             "watermark": watermark,  # 布尔值
             "private": private  # 布尔值 - 重要！必须传递
         }
@@ -1386,8 +1408,8 @@ async def register_user(req: RegisterRequest, db: Session = Depends(get_db)):
             id=user_id,
             email=req.email,
             username=req.username,
-            password=hashed_password,  # 使用加密后的密码
-            credits=520,  # 新用户赠送520积分
+            password_hash=hashed_password,  # 使用加密后的密码
+            credits=100,  # 新用户赠送100积分
             role="user",
             is_active=True
         )
@@ -1398,9 +1420,9 @@ async def register_user(req: RegisterRequest, db: Session = Depends(get_db)):
             id=str(uuid.uuid4()),
             user_id=user_id,
             action="注册奖励",
-            amount=520,
-            balance_after=520,
-            description="新用户注册赠送520积分"
+            amount=100,
+            balance_after=100,
+            description="新用户注册赠送100积分"
         )
         db.add(credit_history)
         
@@ -1416,11 +1438,11 @@ async def register_user(req: RegisterRequest, db: Session = Depends(get_db)):
                 "id": user_id,
                 "email": req.email,
                 "username": req.username,
-                "credits": 520,
+                "credits": 100,
                 "role": "user",
                 "createdAt": int(new_user.created_at.timestamp() * 1000) if new_user.created_at else None
             },
-            "message": "注册成功！获得520积分奖励"
+            "message": "注册成功！获得100积分奖励"
         }
         
     except HTTPException:
@@ -1444,7 +1466,7 @@ async def login_user(req: LoginRequest, db: Session = Depends(get_db)):
             raise HTTPException(status_code=401, detail="邮箱或密码错误")
         
         # 验证密码（使用 bcrypt 验证）
-        if not verify_password(req.password, user.password):
+        if not verify_password(req.password, user.password_hash):
             raise HTTPException(status_code=401, detail="邮箱或密码错误")
         
         # 检查用户是否被禁用
@@ -2105,43 +2127,42 @@ async def get_user_info(user_id: str, db: Session = Depends(get_db)):
         print(f"获取用户信息失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/credits/consume")
-async def consume_credits(user_id: str, amount: int, action: str, description: Optional[str] = None, db: Session = Depends(get_db)):
+@app.get("/api/user/{user_id}/stats")
+async def get_user_stats(user_id: str, db: Session = Depends(get_db)):
     """
-    消费积分
+    获取用户统计数据：视频数、商品数、总消费积分
     """
     try:
+        # 检查用户是否存在
         user = db.query(User).filter(User.id == user_id).first()
         if not user:
             raise HTTPException(status_code=404, detail="用户不存在")
         
-        if user.credits < amount:
-            raise HTTPException(status_code=400, detail="积分不足")
+        # 统计用户视频数
+        video_count = db.query(Video).filter(Video.user_id == user_id).count()
         
-        # 更新积分
-        user.credits -= amount
+        # 统计用户商品数
+        product_count = db.query(Product).filter(Product.user_id == user_id).count()
         
-        # 记录积分历史
-        credit_history = CreditHistory(
-            id=str(uuid.uuid4()),
-            user_id=user_id,
-            action=action,
-            amount=-amount,
-            balance_after=user.credits,
-            description=description or f"{action} 消耗 {amount} 积分"
-        )
-        db.add(credit_history)
-        db.commit()
+        # 统计总消费积分（积分历史中 amount < 0 的记录）
+        consumed_records = db.query(CreditHistory).filter(
+            CreditHistory.user_id == user_id,
+            CreditHistory.amount < 0
+        ).all()
+        total_consumed = sum(abs(record.amount) for record in consumed_records)
         
         return {
             "success": True,
-            "credits": user.credits
+            "videoCount": video_count,
+            "productCount": product_count,
+            "totalConsumed": total_consumed
         }
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
-        print(f"消费积分失败: {e}")
+        print(f"获取用户统计数据失败: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/credits/history/{user_id}")
@@ -2367,93 +2388,4 @@ async def delete_product(product_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ======================
-# 用户认证 API
-# ======================
 
-class UserRegisterRequest(BaseModel):
-    email: str
-    username: str
-    password: str
-
-class UserLoginRequest(BaseModel):
-    email: str
-    password: str
-
-@app.post("/api/register")
-async def register_user(req: UserRegisterRequest, db: Session = Depends(get_db)):
-    """
-    用户注册
-    """
-    try:
-        # 检查用户是否已存在
-        existing_user = db.query(User).filter(User.email == req.email).first()
-        if existing_user:
-            raise HTTPException(status_code=400, detail="邮箱已被注册")
-        
-        # 创建新用户
-        new_user = User(
-            id=str(uuid.uuid4()),
-            email=req.email,
-            username=req.username,
-            password_hash=req.password,  # 实际应用中应该加密
-            credits=520,  # 初始积分
-            role='user'
-        )
-        db.add(new_user)
-        db.commit()
-        db.refresh(new_user)
-        
-        return {
-            "success": True,
-            "user": {
-                "id": new_user.id,
-                "email": new_user.email,
-                "username": new_user.username,
-                "credits": new_user.credits,
-                "role": new_user.role,
-                "createdAt": new_user.created_at.timestamp() * 1000 if new_user.created_at else None
-            }
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        db.rollback()
-        print(f"用户注册失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/login")
-async def login_user(req: UserLoginRequest, db: Session = Depends(get_db)):
-    """
-    用户登录
-    """
-    try:
-        # 查找用户
-        user = db.query(User).filter(User.email == req.email).first()
-        if not user:
-            raise HTTPException(status_code=401, detail="邮箱或密码错误")
-        
-        # 验证密码（实际应用中应该使用加密验证）
-        if user.password_hash != req.password:
-            raise HTTPException(status_code=401, detail="邮箱或密码错误")
-        
-        # 更新最后登录时间
-        user.last_login = datetime.utcnow()
-        db.commit()
-        
-        return {
-            "success": True,
-            "user": {
-                "id": user.id,
-                "email": user.email,
-                "username": user.username,
-                "credits": user.credits,
-                "role": user.role,
-                "createdAt": user.created_at.timestamp() * 1000 if user.created_at else None
-            }
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"用户登录失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))

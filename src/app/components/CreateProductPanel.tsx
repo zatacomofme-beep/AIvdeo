@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { X, Upload, Sparkles, Image as ImageIcon, Trash2 } from 'lucide-react';
 import { useStore } from '../lib/store';
 import { cn } from '../lib/utils';
-import { api } from '../lib/api';
+import { api } from '../../lib/api';
 
 export function CreateProductPanel() {
   const { 

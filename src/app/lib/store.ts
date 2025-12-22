@@ -5,6 +5,7 @@ export interface User {
   id: string;
   email: string;
   username: string;
+  credits: number;  // 新增：用户积分
   createdAt: number;
   role?: 'user' | 'admin';  // 新增：用户角色
 }
@@ -131,6 +132,7 @@ interface AppStore {
   setVideoCount: (count: number) => void;
   setVideoUrl: (url: string | null) => void;
   deductCredits: (amount: number) => void;
+  setCredits: (credits: number) => void;
   
   // My Assets actions
   addGeneratedVideo: (video: Omit<GeneratedVideo, 'id' | 'createdAt'>) => void;
@@ -148,7 +150,7 @@ export const useStore = create<AppStore>()(persist((set) => ({
   // Initial state
   user: null,
   isLoggedIn: false,
-  credits: 520,
+  credits: 0,  // 修改：初始积分为 0，登录/注册后同步后端积分
   uploadedImages: [],
   imagesBase64: [],
   showDirector: false,
@@ -168,9 +170,17 @@ export const useStore = create<AppStore>()(persist((set) => ({
   myCharacters: [],
   
   // User Actions
-  login: (user) => set({ user, isLoggedIn: true }),
-  logout: () => set({ user: null, isLoggedIn: false }),
-  register: (user) => set({ user, isLoggedIn: true }),
+  login: (user) => set({ 
+    user: { ...user, credits: user.credits || 0 },  // 确保 user.credits 和 store.credits 同步
+    isLoggedIn: true,
+    credits: user.credits || 0  // 同步后端返回的积分
+  }),
+  logout: () => set({ user: null, isLoggedIn: false, credits: 0 }),
+  register: (user) => set({ 
+    user: { ...user, credits: user.credits || 520 },  // 确保 user.credits 和 store.credits 同步
+    isLoggedIn: true,
+    credits: user.credits || 520  // 同步后端返回的积分
+  }),
   updateUser: (updates) => set((state) => ({
     user: state.user ? { ...state.user, ...updates } : null
   })),
@@ -238,6 +248,11 @@ export const useStore = create<AppStore>()(persist((set) => ({
   
   deductCredits: (amount) => set((state) => ({ 
     credits: Math.max(0, state.credits - amount) 
+  })),
+  
+  setCredits: (credits) => set((state) => ({
+    credits,
+    user: state.user ? { ...state.user, credits } : null  // 同步更新user.credits
   })),
   
   // My Assets actions

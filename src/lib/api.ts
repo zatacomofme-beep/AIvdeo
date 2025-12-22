@@ -1,6 +1,6 @@
 import { Message, ScriptItem } from './store';
 
-// 后端API基础URL - 直接连接远程服务器
+// 后端API基础URL - 统一配置为云服务器地址
 const API_BASE_URL = 'http://115.190.137.87:8000';
 
 // 定义与后端交互的数据类型
@@ -161,6 +161,18 @@ export const api = {
     duration?: number
   ): Promise<{ url?: string; status: string; task_id?: string; message?: string }> {
     console.log('[API] Calling video generation API...');
+    
+    const payload = {
+      prompt,
+      images: images || [],
+      orientation: orientation || 'portrait',
+      size: size || 'large',
+      duration: duration || 10,
+      watermark: false,
+      private: true
+    };
+    
+    console.log('[API] 请求参数:', JSON.stringify(payload, null, 2));
 
     try {
       const response = await fetch(`${API_BASE_URL}/generate-video`, {
@@ -168,19 +180,12 @@ export const api = {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
-          prompt,
-          images: images || [],
-          orientation: orientation || 'portrait',
-          size: size || 'large',
-          duration: duration || 10,
-          watermark: false,
-          private: true
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
         const error = await response.json();
+        console.error('[API] 请求失败:', response.status, error);
         throw new Error(error.detail || '视频生成请求失败');
       }
 
@@ -197,12 +202,11 @@ export const api = {
    */
   async queryVideoTask(taskId: string): Promise<any> {
     try {
-      const response = await fetch(`${API_BASE_URL}/query-video-task`, {
-        method: 'POST',
+      const response = await fetch(`${API_BASE_URL}/api/video-task/${taskId}`, {
+        method: 'GET',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ task_id: taskId }),
       });
 
       if (!response.ok) {
@@ -490,7 +494,7 @@ export const api = {
     credits: number;
     username: string;
     email: string;
-  }> {
+  } | null> {
     console.log('[API] 获取积分余额...');
     try {
       const response = await fetch(`${API_BASE_URL}/api/credits/balance/${user_id}`, {
@@ -498,12 +502,22 @@ export const api = {
       });
 
       if (!response.ok) {
+        // 404错误不抛出异常，返回null（容错处理）
+        if (response.status === 404) {
+          console.warn('[API] 积分接口404，可能服务端版本未更新');
+          return null;
+        }
         const error = await response.json();
         throw new Error(error.detail || '获取余额失败');
       }
 
       return await response.json();
     } catch (error) {
+      // 网络错误或404，返回null不阻塞业务
+      if (error instanceof TypeError) {
+        console.error('[API] 网络错误:', error);
+        return null;
+      }
       console.error('获取余额失败:', error);
       throw error;
     }
@@ -536,6 +550,43 @@ export const api = {
       return await response.json();
     } catch (error) {
       console.error('获取历史失败:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * 获取用户统计数据
+   */
+  async getUserStats(user_id: string): Promise<{
+    success: boolean;
+    videoCount: number;
+    productCount: number;
+    totalConsumed: number;
+  } | null> {
+    console.log('[API] 获取用户统计数据...');
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/user/${user_id}/stats`, {
+        method: 'GET',
+      });
+
+      if (!response.ok) {
+        // 404错误不抛出异常，返回null（容错处理）
+        if (response.status === 404) {
+          console.warn('[API] 统计接口404，可能服务端版本未更新');
+          return null;
+        }
+        const error = await response.json();
+        throw new Error(error.detail || '获取统计数据失败');
+      }
+
+      return await response.json();
+    } catch (error) {
+      // 网络错误或404，返回null不阻塞业务
+      if (error instanceof TypeError) {
+        console.error('[API] 网络错误:', error);
+        return null;
+      }
+      console.error('获取统计数据失败:', error);
       throw error;
     }
   }

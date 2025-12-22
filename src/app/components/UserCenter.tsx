@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, User, Mail, CreditCard, History, Settings, LogOut, Edit2, Check } from 'lucide-react';
 import { useStore } from '../lib/store';
 import { cn } from '../lib/utils';
+import { api } from '../../lib/api';  // 修复路径：src/app/components -> src/lib
 
 interface UserCenterProps {
   isOpen: boolean;
@@ -14,6 +15,44 @@ export function UserCenter({ isOpen, onClose, onLogout }: UserCenterProps) {
   const [activeTab, setActiveTab] = useState<'profile' | 'billing' | 'history'>('profile');
   const [isEditing, setIsEditing] = useState(false);
   const [editedUsername, setEditedUsername] = useState(user?.username || '');
+  
+  // 统计数据状态
+  const [stats, setStats] = useState({
+    videoCount: 0,
+    productCount: 0,
+    totalConsumed: 0
+  });
+  const [statsLoading, setStatsLoading] = useState(true);
+
+  // 获取用户统计数据
+  useEffect(() => {
+    if (isOpen && user) {
+      fetchUserStats();
+    }
+  }, [isOpen, user]);
+
+  const fetchUserStats = async () => {
+    if (!user) return;
+    
+    setStatsLoading(true);
+    try {
+      const data = await api.getUserStats(user.id);
+      if (data) {
+        setStats({
+          videoCount: data.videoCount,
+          productCount: data.productCount,
+          totalConsumed: data.totalConsumed
+        });
+      } else {
+        console.warn('统计API返回null，使用默认值');
+        // 使用默认值
+      }
+    } catch (error) {
+      console.error('获取统计数据失败:', error);
+    } finally {
+      setStatsLoading(false);
+    }
+  };
 
   if (!isOpen || !user) return null;
 
@@ -172,15 +211,29 @@ export function UserCenter({ isOpen, onClose, onLogout }: UserCenterProps) {
               {/* Stats */}
               <div className="grid grid-cols-3 gap-4">
                 <div className="bg-white border border-slate-200 rounded-lg p-4 text-center shadow-sm">
-                  <div className="text-2xl font-bold text-yellow-500">12</div>
+                  {statsLoading ? (
+                    <div className="text-2xl font-bold text-slate-300">--</div>
+                  ) : (
+                    <div className="text-2xl font-bold text-yellow-500">{stats.videoCount}</div>
+                  )}
                   <div className="text-sm text-slate-500 mt-1">生成视频数</div>
                 </div>
                 <div className="bg-white border border-slate-200 rounded-lg p-4 text-center shadow-sm">
-                  <div className="text-2xl font-bold text-blue-500">25</div>
+                  {statsLoading ? (
+                    <div className="text-2xl font-bold text-slate-300">--</div>
+                  ) : (
+                    <div className="text-2xl font-bold text-blue-500">{stats.productCount}</div>
+                  )}
                   <div className="text-sm text-slate-500 mt-1">保存商品数</div>
                 </div>
                 <div className="bg-white border border-slate-200 rounded-lg p-4 text-center shadow-sm">
-                  <div className="text-2xl font-bold text-green-500">1,200</div>
+                  {statsLoading ? (
+                    <div className="text-2xl font-bold text-slate-300">--</div>
+                  ) : (
+                    <div className="text-2xl font-bold text-green-500">
+                      {stats.totalConsumed.toLocaleString()}
+                    </div>
+                  )}
                   <div className="text-sm text-slate-500 mt-1">总消费积分</div>
                 </div>
               </div>

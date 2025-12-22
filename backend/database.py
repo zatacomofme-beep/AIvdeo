@@ -58,7 +58,7 @@ class User(Base):
     password_hash = Column(String(255))  # 密码哈希
     wechat_openid = Column(String(100), unique=True, index=True)  # 微信登录
     
-    credits = Column(Integer, default=520)  # 用户积分
+    credits = Column(Integer, default=100)  # 用户积分，新用户默认100积分
     role = Column(String(20), default='user')  # user 或 admin
     
     created_at = Column(DateTime, default=datetime.utcnow)
