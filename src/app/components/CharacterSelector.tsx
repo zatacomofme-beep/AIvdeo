@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Users, Plus, X, Wand2, Loader2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useStore, Character } from '../lib/store';
-const API_BASE_URL = 'http://115.190.137.87:8000';
+const API_BASE_URL = 'https://semopic.com';
 
 interface CharacterSelectorProps {
   onSelectCharacter: (character: Character | null) => void;
@@ -10,7 +10,7 @@ interface CharacterSelectorProps {
 }
 
 export function CharacterSelector({ onSelectCharacter, selectedCharacter }: CharacterSelectorProps) {
-  const { myCharacters, addCharacter } = useStore();
+  const { myCharacters, addCharacter, user } = useStore();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [formData, setFormData] = useState({
@@ -75,7 +75,8 @@ export function CharacterSelector({ onSelectCharacter, selectedCharacter }: Char
         tags: data.tags
       });
       
-      alert('✅ AI生成成功！请检查并修改信息。');
+      // AI生成成功，静默填充，不弹窗
+      console.log('✅ AI生成成功，表单数据已更新');
     } catch (error) {
       console.error('AI生成角色失败:', error);
       alert('❌ AI生成失败，请稍后重试');
@@ -84,8 +85,28 @@ export function CharacterSelector({ onSelectCharacter, selectedCharacter }: Char
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    
+    // ⚠️ 重新获取最新的 user 值（避免闭包问题）
+    const currentUser = useStore.getState().user;
+    const isLoggedIn = useStore.getState().isLoggedIn;
+    const storeState = useStore.getState();
+    
+    console.log('[CharacterSelector] ==========调试信息==========');
+    console.log('[CharacterSelector] 当前用户:', currentUser);
+    console.log('[CharacterSelector] 登录状态:', isLoggedIn);
+    console.log('[CharacterSelector] 完整 store:', storeState);
+    console.log('[CharacterSelector] localStorage:', localStorage.getItem('app-store'));
+    console.log('[CharacterSelector] ================================');
+    
+    // ✅ 修复：在开始加载前先检查登录状态
+    if (!currentUser?.id) {
+      console.error('[CharacterSelector] 未登录！currentUser:', currentUser);
+      alert('请先登录后再创建角色！');
+      return;
+    }
+    
     if (!formData.name || !formData.description) {
       alert('请填写角色名称和描述');
       return;
@@ -96,12 +117,13 @@ export function CharacterSelector({ onSelectCharacter, selectedCharacter }: Char
     
     try {
       // 调用后端API创建Sora2角色
-      const response = await fetch(`${API_BASE_URL}/create-character`, {
+      const response = await fetch(`${API_BASE_URL}/api/create-character`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          user_id: currentUser.id, // 使用最新的 user.id
           name: formData.name,
           description: formData.description,
           avatar: '', // 头像为空
@@ -148,8 +170,8 @@ export function CharacterSelector({ onSelectCharacter, selectedCharacter }: Char
       
       setShowCreateModal(false);
       
-      // 显示成功提示
-      alert(`✅ 角色创建成功！\n\n角色ID: ${result.character_id}`);
+      // 角色创建成功，静默关闭弹窗
+      console.log('✅ 角色创建成功:', result.character_id);
       
       // 自动选中新创建的角色
       setTimeout(() => {
@@ -324,13 +346,12 @@ export function CharacterSelector({ onSelectCharacter, selectedCharacter }: Char
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      国家 <span className="text-red-500">*</span>
+                      国家
                     </label>
                     <select
                       value={formData.country}
                       onChange={(e) => setFormData({ ...formData, country: e.target.value })}
                       className="w-full px-4 py-3 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-                      required
                     >
                       <option value="">请选择国家</option>
                       <option value="中国">中国</option>
@@ -363,13 +384,12 @@ export function CharacterSelector({ onSelectCharacter, selectedCharacter }: Char
 
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      人种 <span className="text-red-500">*</span>
+                      人种
                     </label>
                     <select
                       value={formData.ethnicity}
                       onChange={(e) => setFormData({ ...formData, ethnicity: e.target.value })}
                       className="w-full px-4 py-3 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-                      required
                     >
                       <option value="">请选择人种</option>
                       <optgroup label="东亚">
@@ -405,7 +425,7 @@ export function CharacterSelector({ onSelectCharacter, selectedCharacter }: Char
 
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      年龄 <span className="text-red-500">*</span>
+                      年龄
                     </label>
                     <input
                       type="number"
@@ -415,19 +435,17 @@ export function CharacterSelector({ onSelectCharacter, selectedCharacter }: Char
                       min="18"
                       max="80"
                       className="w-full px-4 py-3 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-                      required
                     />
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">
-                      性别 <span className="text-red-500">*</span>
+                      性别
                     </label>
                     <select
                       value={formData.gender}
                       onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
                       className="w-full px-4 py-3 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-                      required
                     >
                       <option value="">请选择性别</option>
                       <option value="男">男</option>

@@ -13,6 +13,11 @@ import { MyProducts } from './components/assets/MyProducts';
 import { MyCharacters } from './components/assets/MyCharacters';
 import { ContentSquare } from './components/ContentSquare';
 import { AdminPanel } from './components/AdminPanel';
+import { NineGridGenerator } from './components/NineGridGenerator';
+import { Footer } from './components/Footer';
+import { PrivacyPolicy } from './components/PrivacyPolicy';
+import { TermsOfService } from './components/TermsOfService';
+import { ContactUs } from './components/ContactUs';
 import { useStore } from './lib/store';
 import { api } from '../lib/api';
 import { ToastProvider, useToast } from './components/ui/toast';
@@ -22,8 +27,11 @@ function AppContent() {
   const [showLogin, setShowLogin] = React.useState(false);
   const [showUserCenter, setShowUserCenter] = React.useState(false);
   const [showRecharge, setShowRecharge] = React.useState(false);
+  const [showPrivacy, setShowPrivacy] = React.useState(false);
+  const [showTerms, setShowTerms] = React.useState(false);
+  const [showContact, setShowContact] = React.useState(false);
   
-  const { login, register, logout, addCredits } = useStore();
+  const { login, register, logout, addCredits, loadUserData } = useStore();
   const toast = useToast();
 
   const handleLogin = async (email: string, password: string) => {
@@ -51,6 +59,10 @@ function AppContent() {
         ...response.user,
         credits: finalCredits  // 使用从数据库拉取的最新积分（或登录返回的积分）
       });
+      
+      // ✅ 加载用户的角色和商品数据
+      console.log('[handleLogin] 加载用户数据...');
+      await loadUserData(response.user.id);
       
       // 先关闭弹窗，然后显示提示
       console.log('[handleLogin] 关闭弹窗...');
@@ -101,6 +113,8 @@ function AppContent() {
         return <MainWorkspace />;
       case 'square':
         return <ContentSquare />;
+      case 'nine-grid':
+        return <NineGridGenerator />;
       case 'my-videos':
         return <MyVideos />;
       case 'my-prompts':
@@ -117,14 +131,14 @@ function AppContent() {
   };
 
   return (
-    <div className="h-screen w-screen bg-slate-50 text-slate-900 flex overflow-hidden relative">
-      {/* Diffuse Background Elements */}
-      <div className="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] rounded-full bg-purple-200/40 blur-[120px] animate-float pointer-events-none z-0" />
-      <div className="absolute bottom-[-20%] right-[-10%] w-[600px] h-[600px] rounded-full bg-blue-200/40 blur-[120px] animate-float-delayed pointer-events-none z-0" />
-      <div className="absolute top-[30%] left-[40%] w-[400px] h-[400px] rounded-full bg-cyan-200/40 blur-[100px] animate-float pointer-events-none z-0" />
+    <div className="h-screen w-screen bg-gradient-to-br from-slate-50 via-purple-50/30 to-blue-50/30 text-slate-900 flex overflow-hidden relative">
+      {/* Enhanced Background Elements with MindVideo Style */}
+      <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] rounded-full bg-gradient-to-br from-purple-300/30 to-pink-300/30 blur-[140px] animate-pulse pointer-events-none z-0" />
+      <div className="absolute bottom-[-20%] right-[-10%] w-[700px] h-[700px] rounded-full bg-gradient-to-br from-blue-300/30 to-cyan-300/30 blur-[150px] animate-pulse pointer-events-none z-0" style={{ animationDelay: '2s' }} />
+      <div className="absolute top-[40%] left-[50%] w-[500px] h-[500px] rounded-full bg-gradient-to-br from-yellow-200/20 to-amber-200/20 blur-[120px] animate-pulse pointer-events-none z-0" style={{ animationDelay: '1s' }} />
 
-      {/* Background Grid Overlay (Optional for Cyberpunk feel) */}
-      <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10 pointer-events-none z-0 mix-blend-multiply"></div>
+      {/* Noise Texture Overlay */}
+      <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.015] pointer-events-none z-0 mix-blend-overlay"></div>
 
       {/* Left Sidebar */}
       <div className="relative z-10 flex h-full">
@@ -143,7 +157,16 @@ function AppContent() {
         <TopBar />
 
         {/* Workspace */}
-        {renderContent()}
+        <div className="flex-1 overflow-auto">
+          {renderContent()}
+        </div>
+
+        {/* Footer */}
+        <Footer
+          onOpenPrivacy={() => setShowPrivacy(true)}
+          onOpenTerms={() => setShowTerms(true)}
+          onOpenContact={() => setShowContact(true)}
+        />
       </div>
 
       {/* AI Director Panel */}
@@ -172,6 +195,24 @@ function AppContent() {
         isOpen={showRecharge}
         onClose={() => setShowRecharge(false)}
         onRecharge={handleRecharge}
+      />
+
+      {/* Privacy Policy */}
+      <PrivacyPolicy
+        isOpen={showPrivacy}
+        onClose={() => setShowPrivacy(false)}
+      />
+
+      {/* Terms of Service */}
+      <TermsOfService
+        isOpen={showTerms}
+        onClose={() => setShowTerms(false)}
+      />
+
+      {/* Contact Us */}
+      <ContactUs
+        isOpen={showContact}
+        onClose={() => setShowContact(false)}
       />
     </div>
   );

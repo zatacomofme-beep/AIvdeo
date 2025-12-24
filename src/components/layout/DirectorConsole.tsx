@@ -253,7 +253,7 @@ export function DirectorConsole() {
               ) : (
                 <>
                   <Sparkles className="w-4 h-4 mr-2" />
-                  生成视频 (50 Credits)
+                  生成视频 (70 积分)
                 </>
               )}
             </Button>

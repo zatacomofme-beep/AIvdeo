@@ -117,7 +117,7 @@ def get_script_generation_prompt(
     生成视频脚本的prompt
     
     Args:
-        product_name: 商品名称
+        product_name: 商品名称（仅用于内部记录，不传给AI）
         category: 类目
         usage: 使用方式
         selling_points: 核心卖点
@@ -148,7 +148,6 @@ def get_script_generation_prompt(
     return f"""你是专业的短视频脚本创作导演。请根据以下信息创作一个{duration}秒的UGC风格短视频脚本。
 
 商品信息：
-- 商品名称：{product_name}
 - 类目：{category}
 - 使用方式：{usage}
 - 核心卖点：
@@ -164,14 +163,25 @@ def get_script_generation_prompt(
 2. audio（台词）字段 → 使用【{language}】
 3. 不要混用语言！场景描述用英文，台词用{language}
 
+⚠️ 【禁止在scene和action中提及商品信息】：
+1. scene和action是视觉描述，禁止提及：
+   - 具体的商品名称、品牌名（如"Muspus"、"iPhone"等）
+   - 具体的颜色（如"red lipstick"、"pink bottle"）
+   - 具体的形状、大小、材质特征
+2. 只能使用通用类目名称：
+   - 如："the product"、"the lipstick"、"the bottle"、"it"
+   - 或者直接省略，只说动作
+3. audio（台词）中可以提及具体信息，因为是音频
+4. 原因：Sora2根据scene/action的文字生成画面，具体描述会导致与实际商品图片不一致
+
 请按照以下格式返回JSON：
 {{
   "shots": [
     {{
       "time": "0-{int(duration/3)}s",
-      "scene": "Scene description in English",
-      "action": "Action description in English",
-      "audio": "台词内容使用{language}！",
+      "scene": "Scene description in English (NO specific product names, colors, or shapes)",
+      "action": "Action description in English (use generic terms like 'the product', 'the lipstick', NOT brand names or specific colors)",
+      "audio": "{language}台词（这里可以提商品名称，因为是音频）",
       "emotion": "Emotion in English"
     }}
   ]
@@ -181,29 +191,58 @@ def get_script_generation_prompt(
 1. 生成{int(duration/5)}-{int(duration/3)}个分镜场景，总时长{duration}秒
 2. 【关键】scene, action, emotion 必须用英文写！
 3. 【关键】audio字段的台词内容必须100%使用{language}！
-4. 台词要口语化、自然，符合{country}当地人的说话习惯
-5. 突出核心卖点，展示{usage}过程
-6. 情绪弧线：从"curious/neutral"到"satisfied/excited"
-7. 如果有角色信息，请让角色以第一人称视角介绍产品{style_requirement}
-8. 场景描述要具体、生动，便于视频生成（用英文描述）
-9. 动作要自然、真实，避免僵硬的广告感（用英文描述）
+4. 【核心】scene和action中禁止出现：
+   - 具体商品/品牌名称
+   - 具体颜色、形状、大小描述
+   - 只用通用类目名："the {category}"、"the product"、"it"
+5. audio（台词）可以自由发挥，可以提商品名称，因为是音频不影响画面
+6. 台词要口语化、自然，符合{country}当地人的说话习惯
+7. 突出核心卖点，展示{usage}过程
+8. 情绪弧线：从"curious/neutral"到"satisfied/excited"
+9. 如果有角色信息，请让角色以第一人称视角介绍产品{style_requirement}
+10. 场景描述要具体、生动，便于视频生成
+11. 动作要自然、真实，避免僵硬的广告感
 
-示例格式（假设目标语言是泰语）：
+正确示例（假设类目是美妆个护/口红）：
 {{
   "shots": [
     {{
       "time": "0-5s",
       "scene": "Indoor living room with natural lighting",
-      "action": "Person holding product and smiling at camera",
-      "audio": "สวัสดีครับ วันนี้ผมจะมาแนะนำผลิตภัณฑ์ที่ดีมากๆ",
+      "action": "Person holding the lipstick and smiling at camera",  ← ✅ 用通用称呼"the lipstick"
+      "audio": "สวัสดีครับ วันนี้ผมจะมาแนะนำ Muspus ค่ะ",  ← ✅ audio里可以提商品名
       "emotion": "Excited and friendly"
+    }},
+    {{
+      "time": "5-10s",
+      "scene": "Close-up on lips and hands with soft daylight",
+      "action": "She uses the product to outline the lips",  ← ✅ 用"the product"或直接省略
+      "audio": "สีสันสวยมาก ทาง่ายและเนียนนุ่ม",
+      "emotion": "Focused and satisfied"
+    }}
+  ]
+}}
+
+错误示例（禁止这样写）：
+{{
+  "shots": [
+    {{
+      "scene": "Indoor room",
+      "action": "Person holding Muspus lipstick",  ← ❌ 禁止！不能在action中提商品名
+      "audio": "..."
+    }},
+    {{
+      "scene": "Close-up on red lipstick",  ← ❌ 禁止！不能在scene中描述颜色
+      "action": "She applies the pink product",  ← ❌ 禁止！不能描述颜色
+      "audio": "..."
     }}
   ]
 }}
 
 再次强调：
-- scene/action/emotion 用英文
-- audio（台词）用{language}
+- scene/action → 用英文 + 禁止具体描述（商品名、颜色、形状）
+- audio → 用{language} + 可以自由发挥
+- emotion → 用英文
 
 仅返回JSON，不要其他文字。"""
 

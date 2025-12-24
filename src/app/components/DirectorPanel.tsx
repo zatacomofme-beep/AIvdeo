@@ -6,7 +6,7 @@ import { api } from '../../lib/api';
 import { CharacterSelector } from './CharacterSelector';
 import { showToast } from '../lib/toast-utils';
 
-const API_BASE_URL = 'http://115.190.137.87:8000';
+const API_BASE_URL = 'https://semopic.com';
 
 export function DirectorPanel() {
   const { 
@@ -235,12 +235,8 @@ export function DirectorPanel() {
             deductCredits(70);
           }
         }
-        alert(`✅ 视频生成成功！
-
-扣陉70 Credits
-剩余积分：${credits - 70} Credits
-
-视频已添加到“我的视频”`);
+        // 视频生成成功，静默处理
+        console.log('✅ 视频生成成功，扣陉70 Credits，剩余:', credits - 70);
         setGenerating(false);
         setShowDirector(false);
       } else if (result.task_id) {
@@ -260,12 +256,8 @@ export function DirectorPanel() {
           }
         }
         setVideoTaskId(result.task_id);
-        alert(`✅ 视频已开始生成！
-
-扣陉70 Credits
-剩余积分：${credits - 70} Credits
-
-请到“我的视频”页面查看生成进度`);
+        // 视频开始生成，静默处理
+        console.log('✅ 视频开始生成，任务ID:', result.task_id);
         setGenerating(false);
         setShowDirector(false);
       }
@@ -288,7 +280,8 @@ export function DirectorPanel() {
         
         if (status.status === 'completed') {
           clearInterval(pollInterval);
-          alert(`✅ 视频生成成功！\n\n视频URL: ${status.video_url}`);
+          // 视频生成完成，静默处理
+          console.log('✅ 视频生成完成:', status.video_url);
           setGenerating(false);
           setShowDirector(false);
           setVideoProgress(0);
@@ -696,33 +689,41 @@ export function DirectorPanel() {
           {/* Step 4: Script */}
           {currentStep === 4 && (
             <div className="space-y-6 relative z-10 animate-in slide-in-from-right-10 duration-500">
-              <div className="glass p-4 rounded-xl border border-cyan-200 bg-cyan-50/50 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                   <div className="w-1.5 h-1.5 rounded-full bg-cyan-500 mt-0.5 shrink-0" />
-                   <p className="text-sm text-cyan-800/80">
-                     AI 已准备就绪，点击右侧按钮生成专业分镜脚本。
-                   </p>
+              <div className="glass p-4 rounded-xl border border-cyan-200 bg-cyan-50/50">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                     <div className="w-1.5 h-1.5 rounded-full bg-cyan-500 mt-0.5 shrink-0" />
+                     <p className="text-sm text-cyan-800/80">
+                       AI 已准备就绪，点击右侧按钮生成专业分镜脚本。
+                     </p>
+                  </div>
                 </div>
-                <button
-                  onClick={handleGenerateScript}
-                  disabled={isGeneratingScript}
-                  className={cn(
-                    "px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white rounded-lg flex items-center gap-2 transition-all text-sm font-medium shadow-md shadow-cyan-500/20",
-                    isGeneratingScript && "opacity-50 cursor-not-allowed"
-                  )}
-                >
-                  {isGeneratingScript ? (
-                    <>
-                      <Loader2 className="animate-spin" size={16} />
-                      生成中...
-                    </>
-                  ) : (
-                    <>
-                      <Wand2 size={16} />
-                      AI 生成脚本
-                    </>
-                  )}
-                </button>
+                <div className="flex items-center justify-between gap-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-amber-900">本次消耗</span>
+                    <span className="px-2 py-1 bg-amber-100 border border-amber-300 rounded text-amber-900 text-sm font-bold">30 积分</span>
+                  </div>
+                  <button
+                    onClick={handleGenerateScript}
+                    disabled={isGeneratingScript}
+                    className={cn(
+                      "px-5 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white rounded-lg flex items-center gap-2 transition-all text-sm font-medium shadow-md shadow-cyan-500/20",
+                      isGeneratingScript && "opacity-50 cursor-not-allowed"
+                    )}
+                  >
+                    {isGeneratingScript ? (
+                      <>
+                        <Loader2 className="animate-spin" size={16} />
+                        生成中...
+                      </>
+                    ) : (
+                      <>
+                        <Wand2 size={16} />
+                        AI 生成脚本
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
 
               <div className="relative">
@@ -789,7 +790,7 @@ export function DirectorPanel() {
                   className="w-16 px-2 py-1 bg-white border border-slate-300 rounded text-slate-900 text-center focus:outline-none focus:border-yellow-400 text-sm"
                 />
                 <span className="text-xs text-amber-600 font-mono font-bold">
-                  {videoCount * 50} Cr
+                  {videoCount * 70} 积分
                 </span>
               </div>
             )}

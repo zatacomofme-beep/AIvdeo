@@ -11,18 +11,39 @@ export function MainWorkspace() {
   } = useStore();
 
   return (
-    <div className="flex-1 flex flex-col h-screen overflow-hidden relative z-10">
+    <div className="flex-1 flex flex-col h-screen overflow-hidden relative">
       {/* 创建商品面板 */}
       <CreateProductPanel />
       
-      {/* Hero Section */}
-      <div className="flex-1 flex flex-col items-center justify-center p-8">
-        <div className="w-full max-w-4xl">
-          {/* Title */}
-          <h1 className="text-5xl font-bold mb-8 text-center text-transparent bg-clip-text bg-gradient-to-r from-blue-600 via-purple-600 to-cyan-600 animate-pulse drop-shadow-sm">
-            新的素材获取方式
-            <span className="block text-xl font-normal text-slate-500 mt-2 tracking-widest uppercase">Create Professional Videos with AI</span>
-          </h1>
+      {/* Hero Section with Modern Design */}
+      <div className="flex-1 flex flex-col items-center justify-center p-12 relative overflow-hidden">
+        {/* Background Gradient Orbs */}
+        <div className="absolute top-[-20%] right-[-10%] w-[600px] h-[600px] rounded-full bg-gradient-to-br from-purple-300/30 to-pink-300/30 blur-[120px] animate-pulse" />
+        <div className="absolute bottom-[-20%] left-[-10%] w-[700px] h-[700px] rounded-full bg-gradient-to-br from-blue-300/30 to-cyan-300/30 blur-[140px] animate-pulse" style={{ animationDelay: '1s' }} />
+        
+        <div className="w-full max-w-6xl relative z-10">
+          {/* Title with Modern Typography */}
+          <div className="text-center mb-16">
+            <h1 className="text-7xl font-black mb-6 leading-tight">
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 animate-gradient">
+                新的素材获取方式
+              </span>
+            </h1>
+            <p className="text-2xl text-slate-600 font-medium tracking-wide">
+              使用 AI 创建专业级视频内容
+            </p>
+            <div className="flex items-center justify-center gap-4 mt-6">
+              <div className="px-4 py-2 bg-gradient-to-r from-purple-500/10 to-pink-500/10 rounded-full text-sm font-semibold text-purple-700 border border-purple-200/50">
+                ✨ AI 驱动
+              </div>
+              <div className="px-4 py-2 bg-gradient-to-r from-blue-500/10 to-cyan-500/10 rounded-full text-sm font-semibold text-blue-700 border border-blue-200/50">
+                🚀 极速生成
+              </div>
+              <div className="px-4 py-2 bg-gradient-to-r from-green-500/10 to-emerald-500/10 rounded-full text-sm font-semibold text-green-700 border border-green-200/50">
+                🎯 专业品质
+              </div>
+            </div>
+          </div>
 
           {/* Main Action Cards */}
           <div className="grid grid-cols-2 gap-6 mb-12">
@@ -75,34 +96,60 @@ export function MainWorkspace() {
             </button>
           </div>
 
-          {/* Info Cards */}
-          <div className="grid grid-cols-3 gap-6 max-w-3xl mx-auto">
-            <div className="glass p-6 rounded-xl bg-white/40 border border-slate-200 hover:bg-white/60 transition-colors group cursor-default shadow-sm hover:shadow-md">
-              <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 mb-3 group-hover:scale-110 transition-transform border border-blue-200 shadow-sm">1</div>
-              <div className="text-lg font-medium mb-1 text-slate-800">创建商品</div>
-              <div className="text-sm text-slate-500 leading-relaxed">上传图片，填写商品信息，保存到商品库</div>
+          {/* Process Steps - Modern Cards */}
+          <div className="grid grid-cols-3 gap-6">
+            <div className="group relative overflow-hidden p-8 rounded-2xl bg-gradient-to-br from-white/70 to-white/40 backdrop-blur-xl border border-white/60 hover:border-blue-300/60 shadow-lg hover:shadow-2xl transition-all duration-500 hover:-translate-y-1">
+              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-cyan-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+              <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10" />
+              
+              <div className="relative">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-white mb-5 group-hover:scale-110 group-hover:rotate-3 transition-all duration-500 shadow-xl shadow-blue-500/30 text-2xl font-black">
+                  1
+                </div>
+                <div className="text-xl font-black mb-3 text-slate-900">创建商品</div>
+                <div className="text-sm text-slate-600 leading-relaxed">上传图片，填写商品信息，保存到商品库</div>
+              </div>
             </div>
-            <div className="glass p-6 rounded-xl bg-white/40 border border-slate-200 hover:bg-white/60 transition-colors group cursor-default shadow-sm hover:shadow-md">
-              <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center text-purple-600 mb-3 group-hover:scale-110 transition-transform border border-purple-200 shadow-sm">2</div>
-              <div className="text-lg font-medium mb-1 text-slate-800">选择商品</div>
-              <div className="text-sm text-slate-500 leading-relaxed">从商品库选择，配置视频参数和角色</div>
+            
+            <div className="group relative overflow-hidden p-8 rounded-2xl bg-gradient-to-br from-white/70 to-white/40 backdrop-blur-xl border border-white/60 hover:border-purple-300/60 shadow-lg hover:shadow-2xl transition-all duration-500 hover:-translate-y-1">
+              <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-pink-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+              <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10" />
+              
+              <div className="relative">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white mb-5 group-hover:scale-110 group-hover:rotate-3 transition-all duration-500 shadow-xl shadow-purple-500/30 text-2xl font-black">
+                  2
+                </div>
+                <div className="text-xl font-black mb-3 text-slate-900">选择商品</div>
+                <div className="text-sm text-slate-600 leading-relaxed">从商品库选择，配置视频参数和角色</div>
+              </div>
             </div>
-            <div className="glass p-6 rounded-xl bg-white/40 border border-slate-200 hover:bg-white/60 transition-colors group cursor-default shadow-sm hover:shadow-md">
-              <div className="w-10 h-10 rounded-lg bg-cyan-100 flex items-center justify-center text-cyan-600 mb-3 group-hover:scale-110 transition-transform border border-cyan-200 shadow-sm">3</div>
-              <div className="text-lg font-medium mb-1 text-slate-800">AI 生成</div>
-              <div className="text-sm text-slate-500 leading-relaxed">一键生成专业营销视频</div>
+            
+            <div className="group relative overflow-hidden p-8 rounded-2xl bg-gradient-to-br from-white/70 to-white/40 backdrop-blur-xl border border-white/60 hover:border-cyan-300/60 shadow-lg hover:shadow-2xl transition-all duration-500 hover:-translate-y-1">
+              <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 to-emerald-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+              <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10" />
+              
+              <div className="relative">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-500 to-emerald-500 flex items-center justify-center text-white mb-5 group-hover:scale-110 group-hover:rotate-3 transition-all duration-500 shadow-xl shadow-cyan-500/30 text-2xl font-black">
+                  3
+                </div>
+                <div className="text-xl font-black mb-3 text-slate-900">AI 生成</div>
+                <div className="text-sm text-slate-600 leading-relaxed">一键生成专业营销视频</div>
+              </div>
             </div>
           </div>
 
-          {/* Quick Tip */}
+          {/* Quick Tip - Modern Alert */}
           {savedProducts.length === 0 && (
-            <div className="mt-8 p-4 bg-blue-50/80 border border-blue-200 rounded-xl max-w-2xl mx-auto">
-              <div className="flex items-start gap-3">
-                <Package className="text-blue-600 flex-shrink-0 mt-0.5" size={20} />
+            <div className="mt-12 relative overflow-hidden p-6 bg-gradient-to-r from-blue-500/20 via-cyan-500/20 to-purple-500/20 backdrop-blur-xl border border-blue-300/40 rounded-2xl shadow-lg">
+              <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20" />
+              <div className="relative flex items-start gap-4">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-blue-500/30 shrink-0">
+                  <Package className="text-white" size={24} />
+                </div>
                 <div>
-                  <p className="text-sm text-blue-800 font-medium mb-1">💡 开始提示</p>
-                  <p className="text-sm text-blue-700">
-                    您还没有创建商品。点击上方"创建商品"按钮，上传商品图片并填写信息，即可开始AI视频创作！
+                  <p className="text-lg font-black text-blue-900 mb-2">💡 开始提示</p>
+                  <p className="text-sm text-blue-800 leading-relaxed">
+                    您还没有创建商品。点击上方“创建商品”按钮，上传商品图片并填写信息，即可开始 AI 视频创作！
                   </p>
                 </div>
               </div>

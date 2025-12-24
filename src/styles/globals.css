@@ -4,35 +4,36 @@
 
 @layer base {
   :root {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
+    /* 现代化简约配色方案 */
+    --background: 0 0% 100%;           /* 纯白背景 */
+    --foreground: 0 0% 10%;             /* 深灰文字 */
     
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
+    --card: 0 0% 100%;                  /* 卡片白色 */
+    --card-foreground: 0 0% 10%;
  
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 10%;
  
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 84% 4.9%;
+    --primary: 262 83% 58%;             /* 现代紫色 */
+    --primary-foreground: 0 0% 100%;
  
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 0 0% 96%;              /* 浅灰背景 */
+    --secondary-foreground: 0 0% 10%;
  
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 45%;
  
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 262 83% 58%;
+    --accent-foreground: 0 0% 100%;
  
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
  
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --border: 0 0% 90%;                 /* 清晰边框 */
+    --input: 0 0% 90%;
+    --ring: 262 83% 58%;
  
-    --radius: 0.5rem;
+    --radius: 0.75rem;                  /* 统一圆角 */
   }
 }
  
@@ -40,9 +41,13 @@
   * {
     @apply border-border;
   }
+  
   body {
     @apply bg-background text-foreground;
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
   
   html {
@@ -60,24 +65,66 @@
   }
 }
 
-/* Custom Effects */
-.glass-panel {
-  @apply bg-[#121214]/80 backdrop-blur-md border border-[#2A2A2E];
+/* 现代化简约组件样式 */
+@layer components {
+  /* 去除毛玻璃，使用纯色卡片 */
+  .modern-card {
+    @apply bg-white border border-gray-200 rounded-xl shadow-sm;
+  }
+  
+  /* 现代按钮 */
+  .modern-button {
+    @apply px-4 py-2 rounded-lg font-medium transition-all duration-200;
+    @apply hover:shadow-md active:scale-[0.98];
+  }
+  
+  .modern-button-primary {
+    @apply modern-button bg-purple-600 text-white hover:bg-purple-700;
+  }
+  
+  .modern-button-secondary {
+    @apply modern-button bg-gray-100 text-gray-900 hover:bg-gray-200;
+  }
+  
+  /* 输入框 */
+  .modern-input {
+    @apply w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg;
+    @apply focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent;
+    @apply transition-all duration-200;
+  }
+  
+  /* 分割线 */
+  .modern-divider {
+    @apply border-t border-gray-200;
+  }
 }
 
-.glow-text {
-  text-shadow: 0 0 10px rgba(138, 43, 226, 0.5);
-}
-
-.glow-box {
-  box-shadow: 0 0 15px rgba(138, 43, 226, 0.2);
-}
-
-.text-gradient-primary {
-  @apply bg-clip-text text-transparent bg-gradient-to-r from-[#8A2BE2] to-[#6A5ACD];
-}
-
-/* Animation utilities */
-.animate-pulse-slow {
-  animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+/* 实用工具类 */
+@layer utilities {
+  /* 滚动条样式 */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-track {
+    @apply bg-gray-100 rounded-full;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-gray-300 rounded-full;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-400;
+  }
+  
+  /* 阴影系统 */
+  .shadow-modern {
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05);
+  }
+  
+  .shadow-modern-lg {
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.03);
+  }
 }

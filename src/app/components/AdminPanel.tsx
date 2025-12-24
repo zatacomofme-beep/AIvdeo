@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
-const API_BASE_URL = 'http://115.190.137.87:8000';
+const API_BASE_URL = 'https://semopic.com';
 
 interface User {
   id: string;

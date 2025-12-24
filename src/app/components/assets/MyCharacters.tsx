@@ -1,13 +1,11 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Users, Plus, Trash2, Clock, Edit, X, Wand2, Loader2 } from 'lucide-react';
 import { useStore } from '../../lib/store';
-import { useAuthStore } from '../../../lib/store';  // 新增：导入 useAuthStore
 import { cn } from '../../lib/utils';
-const API_BASE_URL = 'http://115.190.137.87:8000';
+const API_BASE_URL = 'https://semopic.com';
 
 export function MyCharacters() {
-  const { myCharacters, addCharacter, deleteCharacter } = useStore();
-  const { currentUser, isLoggedIn } = useAuthStore();  // 获取当前用户
+  const { myCharacters, addCharacter, deleteCharacter, user, isLoggedIn, loadUserData } = useStore();  // 添加 loadUserData
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [formData, setFormData] = useState({
@@ -20,6 +18,14 @@ export function MyCharacters() {
     style: '',
     tags: ''
   });
+
+  // ✅ 组件初始化时从数据库加载数据
+  useEffect(() => {
+    if (user?.id) {
+      console.log('[MyCharacters] 组件初始化，加载用户数据...');
+      loadUserData(user.id);
+    }
+  }, [user?.id]);
 
   const formatDate = (timestamp: number) => {
     return new Date(timestamp).toLocaleString('zh-CN', {
@@ -81,7 +87,8 @@ export function MyCharacters() {
         tags: data.tags
       });
       
-      alert('✅ AI生成成功！请检查并修改信息。');
+      // AI生成成功，静默填充，不弹窗
+      console.log('✅ AI生成成功，表单数据已更新');
     } catch (error) {
       console.error('AI生成角色失败:', error);
       alert('❌ AI生成失败，请稍后重试');
@@ -97,8 +104,14 @@ export function MyCharacters() {
       return;
     }
 
-    // 检查是否登录
-    if (!isLoggedIn || !currentUser) {
+    // 检查是否登录（实时获取最新状态）
+    const currentUser = useStore.getState().user;
+    const currentIsLoggedIn = useStore.getState().isLoggedIn;
+    
+    console.log('[MyCharacters] 当前用户:', currentUser);
+    console.log('[MyCharacters] 登录状态:', currentIsLoggedIn);
+    
+    if (!currentIsLoggedIn || !currentUser) {
       alert('请先登录后再创建角色！');
       return;
     }
@@ -111,7 +124,7 @@ export function MyCharacters() {
       const currentUserId = currentUser.id;
       
       // 调用后端API创建角色（保存到数据库）
-      const response = await fetch(`${API_BASE_URL}/create-character`, {
+      const response = await fetch(`${API_BASE_URL}/api/create-character`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -204,43 +217,43 @@ export function MyCharacters() {
             <p className="text-sm mt-2">创建您的第一个虚拟角色</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
             {myCharacters.map((character) => (
               <div 
                 key={character.id} 
-                className="group relative bg-white border border-slate-200 rounded-xl overflow-hidden hover:border-purple-400/50 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-purple-500/10"
+                className="group relative bg-white border border-slate-200 rounded-xl overflow-hidden hover:border-purple-400/50 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:shadow-purple-500/10"
               >
-                {/* Avatar Container - 使用首字母头像 */}
-                <div className="aspect-[3/4] relative bg-gradient-to-br from-purple-400 to-pink-400">
-                  <div className="w-full h-full flex items-center justify-center">
-                    <span className="text-8xl font-bold text-white">
-                      {character.name.charAt(0).toUpperCase()}
-                    </span>
-                  </div>
-                  
-                  {/* Overlay */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-4">
-                    <p className="text-white text-sm line-clamp-3">{character.description}</p>
-                  </div>
-
-                  {/* Top Actions */}
-                  <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                {/* 紧凑的头部区域 */}
+                <div className="relative bg-gradient-to-br from-purple-400 to-pink-400 p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    {/* 首字母头像 */}
+                    <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
+                      <span className="text-2xl font-bold text-white">
+                        {character.name.charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                    {/* 删除按钮 */}
                     <button 
                       onClick={() => deleteCharacter(character.id)}
-                      className="p-2 bg-white/90 backdrop-blur-md text-red-500 hover:text-red-600 rounded-lg hover:bg-white transition-colors shadow-sm"
+                      className="opacity-0 group-hover:opacity-100 p-1.5 bg-white/90 backdrop-blur-md text-red-500 hover:text-red-600 rounded-lg hover:bg-white transition-all shadow-sm"
                       title="删除角色"
                     >
-                      <Trash2 size={16} />
+                      <Trash2 size={14} />
                     </button>
                   </div>
-
+                  
+                  {/* 角色名称 */}
+                  <h3 className="font-bold text-white text-base truncate mb-1" title={character.name}>
+                    {character.name}
+                  </h3>
+                  
                   {/* Tags */}
                   {character.tags && character.tags.length > 0 && (
-                    <div className="absolute bottom-2 left-2 right-2 flex flex-wrap gap-1">
-                      {character.tags.slice(0, 3).map((tag, index) => (
+                    <div className="flex flex-wrap gap-1">
+                      {character.tags.slice(0, 2).map((tag, index) => (
                         <span 
                           key={index}
-                          className="text-xs px-2 py-1 bg-white/90 backdrop-blur-md text-slate-700 rounded-md font-medium shadow-sm"
+                          className="text-xs px-2 py-0.5 bg-white/20 backdrop-blur-sm text-white rounded-md"
                         >
                           {tag}
                         </span>
@@ -249,36 +262,38 @@ export function MyCharacters() {
                   )}
                 </div>
 
-                {/* Info */}
-                <div className="p-4 border-t border-slate-100 bg-white">
-                  <h3 className="font-bold text-slate-800 truncate mb-2" title={character.name}>
-                    {character.name}
-                  </h3>
+                {/* 信息区域 */}
+                <div className="p-3 bg-white">
+                  {/* 描述 */}
+                  <p className="text-xs text-slate-600 line-clamp-2 mb-2 min-h-[2rem]">
+                    {character.description}
+                  </p>
                   
-                  <div className="flex items-center gap-3 text-xs text-slate-500 mb-2">
+                  {/* 属性 */}
+                  <div className="flex items-center gap-2 text-xs text-slate-500 mb-2">
                     {character.gender && (
-                      <span className="flex items-center gap-1 px-2 py-1 bg-slate-50 rounded">
+                      <span className="px-2 py-0.5 bg-slate-50 rounded">
                         {character.gender}
                       </span>
                     )}
                     {character.age && (
-                      <span className="flex items-center gap-1 px-2 py-1 bg-slate-50 rounded">
+                      <span className="px-2 py-0.5 bg-slate-50 rounded">
                         {character.age}岁
                       </span>
                     )}
                   </div>
 
+                  {/* 风格 */}
                   {character.style && (
-                    <div className="text-xs text-slate-600 mb-2 px-2 py-1 bg-purple-50 rounded inline-block">
+                    <div className="text-xs text-purple-600 mb-2 px-2 py-0.5 bg-purple-50 rounded inline-block">
                       {character.style}
                     </div>
                   )}
 
-                  <div className="flex items-center justify-between text-xs text-slate-400 mt-2">
-                    <div className="flex items-center gap-1">
-                      <Clock size={12} />
-                      {formatDate(character.createdAt)}
-                    </div>
+                  {/* 创建时间 */}
+                  <div className="flex items-center gap-1 text-xs text-slate-400 pt-2 border-t border-slate-100">
+                    <Clock size={10} />
+                    {formatDate(character.createdAt)}
                   </div>
                 </div>
               </div>
@@ -289,13 +304,19 @@ export function MyCharacters() {
 
       {/* Create Character Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-slate-200 p-6 flex items-center justify-between z-10">
-              <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                <Plus className="text-purple-600" size={24} />
-                创建新角色
-              </h3>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-in fade-in duration-300">
+          <div className="w-[700px] max-h-[90vh] bg-white flex flex-col rounded-2xl overflow-hidden shadow-2xl">
+            {/* Header */}
+            <div className="h-20 flex items-center justify-between px-8 border-b border-slate-200 shrink-0 bg-white">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center shadow-md shadow-purple-500/20 text-white">
+                  <Plus size={24} />
+                </div>
+                <div>
+                  <h2 className="font-bold text-xl text-slate-800">创建新角色</h2>
+                  <p className="text-xs text-slate-500 mt-1">填写角色信息或使用AI生成</p>
+                </div>
+              </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleAIGenerate}
@@ -315,16 +336,18 @@ export function MyCharacters() {
                     </>
                   )}
                 </button>
-                <button 
+                <button
                   onClick={() => setShowCreateModal(false)}
-                  className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                  className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-all"
                 >
-                  <X size={20} className="text-slate-500" />
+                  <X size={24} />
                 </button>
               </div>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-6">
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+              <form onSubmit={handleSubmit} className="space-y-6">
               {/* 国家、人种、年龄、性别 - 先填写这4个参数 */}
               <div className="bg-gradient-to-r from-purple-50 to-blue-50 p-4 rounded-xl border border-purple-200">
                 <h4 className="text-sm font-semibold text-purple-900 mb-3 flex items-center gap-2">
@@ -550,7 +573,8 @@ export function MyCharacters() {
                   创建角色
                 </button>
               </div>
-            </form>
+              </form>
+            </div>
           </div>
         </div>
       )}

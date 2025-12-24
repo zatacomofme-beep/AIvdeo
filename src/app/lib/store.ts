@@ -117,7 +117,7 @@ interface AppStore {
   setGenerating: (generating: boolean) => void;
   
   // Product actions
-  saveProduct: (product: Omit<Product, 'id' | 'createdAt'>) => void;
+  saveProduct: (product: Omit<Product, 'id' | 'createdAt'>) => Promise<void>;  // 修改：返回Promise
   loadProduct: (productId: string) => void;
   setCurrentProduct: (product: Product | null) => void;
   deleteProduct: (productId: string) => void;
@@ -142,6 +142,9 @@ interface AppStore {
   deletePrompt: (promptId: string) => void;
   addCharacter: (character: Omit<Character, 'id' | 'createdAt'>) => void;
   deleteCharacter: (characterId: string) => void;
+  
+  // 数据加载
+  loadUserData: (userId: string) => Promise<void>;
   
   resetProject: () => void;
 }
@@ -212,17 +215,49 @@ export const useStore = create<AppStore>()(persist((set) => ({
   setGenerating: (generating) => set({ isGenerating: generating }),
   
   // Product actions
-  saveProduct: (productData) => set((state) => {
-    const newProduct: Product = {
-      ...productData,
-      id: Date.now().toString(),
-      createdAt: Date.now()
-    };
-    return {
-      savedProducts: [...state.savedProducts, newProduct],
-      currentProduct: newProduct
-    };
-  }),
+  saveProduct: async (productData) => {
+    const state = useStore.getState();
+    
+    // 检查是否登录
+    if (!state.user) {
+      alert('请先登录后再保存商品');
+      return;
+    }
+    
+    try {
+      // 调用后端API保存商品
+      const { api } = await import('../../lib/api');
+      const response = await api.createProduct({
+        user_id: state.user.id,
+        name: productData.name,
+        category: productData.category,
+        description: productData.usage,  // 使用 usage 作为 description
+        selling_points: productData.sellingPoints ? [productData.sellingPoints] : [],
+        images: productData.imageUrls
+      });
+      
+      // 保存成功后，添加到本地state
+      const newProduct: Product = {
+        id: response.product.id,  // 使用后端返回的ID
+        name: productData.name,
+        category: productData.category,
+        usage: productData.usage,
+        sellingPoints: productData.sellingPoints,
+        imageUrls: productData.imageUrls,
+        createdAt: response.product.createdAt || Date.now()
+      };
+      
+      set((state) => ({
+        savedProducts: [...state.savedProducts, newProduct],
+        currentProduct: newProduct
+      }));
+      
+      console.log('[商品保存] 成功保存到数据库:', response.product.id);
+    } catch (error) {
+      console.error('[商品保存] 失败:', error);
+      alert('保存商品失败，请重试');
+    }
+  },
   
   loadProduct: (productId) => set((state) => {
     const product = state.savedProducts.find(p => p.id === productId);
@@ -297,6 +332,109 @@ export const useStore = create<AppStore>()(persist((set) => ({
   deleteCharacter: (characterId) => set((state) => ({
     myCharacters: state.myCharacters.filter(c => c.id !== characterId)
   })),
+
+  // 从数据库加载用户数据
+  loadUserData: async (userId: string) => {
+    console.log('[Store] ========== 开始加载用户数据 ==========');
+    console.log('[Store] 用户ID:', userId);
+    try {
+      const { api } = await import('../../lib/api');
+      
+      console.log('[Store] 正在并行加载角色、商品、提示词和视频...');
+      // 并行加载所有数据
+      const [charactersResponse, productsResponse, promptsResponse, videosResponse] = await Promise.all([
+        api.getUserCharacters(userId),
+        api.getUserProducts(userId),
+        api.getUserPrompts(userId),
+        api.getUserVideos(userId)
+      ]);
+
+      console.log('[Store] ✅ 角色数据:', charactersResponse);
+      console.log('[Store] ✅ 商品数据:', productsResponse);
+      console.log('[Store] ✅ 提示词数据:', promptsResponse);
+      console.log('[Store] ✅ 视频数据:', videosResponse);
+
+      // 转换并设置角色数据
+      const characters = charactersResponse.characters.map(c => {
+        console.log('[Store] 转换角色:', c);
+        return {
+          id: c.id,
+          name: c.name,
+          description: c.description,
+          avatar: '',
+          age: c.age,
+          gender: c.gender,
+          style: c.style,
+          tags: c.tags || [],
+          createdAt: c.createdAt
+        };
+      });
+
+      // 转换并设置商品数据
+      const products = productsResponse.products.map(p => {
+        console.log('[Store] 转换商品:', p);
+        return {
+          id: p.id,
+          name: p.name,
+          category: p.category,
+          usage: p.usage || '',
+          sellingPoints: p.sellingPoints || '',
+          imageUrls: p.imageUrls || [],
+          createdAt: p.createdAt
+        };
+      });
+
+      // 转换并设置提示词数据
+      const prompts = promptsResponse.prompts.map(p => {
+        console.log('[Store] 转换提示词:', p);
+        return {
+          id: p.id,
+          content: p.content,
+          productName: p.productName || '',
+          createdAt: p.createdAt
+        };
+      });
+
+      // 转换并设置视频数据
+      const videos = videosResponse.videos.map(v => {
+        console.log('[Store] 转换视频:', v);
+        return {
+          id: v.id,
+          url: v.url,
+          thumbnail: v.thumbnail || '',
+          script: v.script,
+          productName: v.productName || '',
+          status: v.status,
+          isPublic: v.isPublic,
+          taskId: v.taskId,
+          progress: v.progress,
+          error: v.error,
+          createdAt: v.createdAt
+        };
+      });
+
+      console.log('[Store] 设置数据到 store...');
+      console.log('[Store] - 角色数量:', characters.length);
+      console.log('[Store] - 商品数量:', products.length);
+      console.log('[Store] - 提示词数量:', prompts.length);
+      console.log('[Store] - 视频数量:', videos.length);
+
+      set({
+        myCharacters: characters,
+        savedProducts: products,
+        myPrompts: prompts,
+        myVideos: videos
+      });
+
+      console.log('[Store] ========== 用户数据加载完成 ==========');
+    } catch (error) {
+      console.error('[Store] ❌ 加载用户数据失败:', error);
+      if (error instanceof Error) {
+        console.error('[Store] 错误详情:', error.message);
+        console.error('[Store] 错误堆栈:', error.stack);
+      }
+    }
+  },
   
   resetProject: () => set({
     uploadedImages: [],
@@ -331,4 +469,4 @@ export const useStore = create<AppStore>()(persist((set) => ({
       console.log('[Store] Persist恢复，同步积分:', state.credits);
     }
   }
-});
+}));

@@ -1,7 +1,8 @@
 import { Message, ScriptItem } from './store';
 
-// 后端API基础URL - 统一配置为云服务器地址
-const API_BASE_URL = 'http://115.190.137.87:8000';
+// 后端API基础URL - 使用HTTPS域名(不包含/api路径)
+// 修复：统一使用www前缀，避免CORS跨域问题
+export const API_BASE_URL = 'https://www.semopic.com';
 
 // 定义与后端交互的数据类型
 export interface ApiResponse<T> {
@@ -78,6 +79,35 @@ export const api = {
     }
   },
 
+  /**
+   * 从 TOS 删除图片
+   */
+  async deleteImage(imageUrl: string): Promise<boolean> {
+    console.log('[API] Deleting image from TOS:', imageUrl);
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/delete-image`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ url: imageUrl }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        console.error('[API] Delete failed:', error);
+        return false;
+      }
+
+      console.log('[API] Image deleted successfully');
+      return true;
+    } catch (error) {
+      console.error('[API] Delete image failed:', error);
+      return false;
+    }
+  },
+
   // 已移除产品理解接口 - 不再需要视觉识别功能
 
   // 已移除复杂的多阶段分析接口 - 简化为直接的脚本生成流程
@@ -94,7 +124,7 @@ export const api = {
     console.log('[API] 生成视频脚本...');
 
     try {
-      const response = await fetch(`${API_BASE_URL}/generate-script`, {
+      const response = await fetch(`${API_BASE_URL}/api/generate-script`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -124,7 +154,7 @@ export const api = {
     console.log('[API] Sending message to backend:', content, imageUrl ? `with image: ${imageUrl}` : '');
 
     try {
-      const response = await fetch(`${API_BASE_URL}/chat`, {
+      const response = await fetch(`${API_BASE_URL}/api/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -175,7 +205,7 @@ export const api = {
     console.log('[API] 请求参数:', JSON.stringify(payload, null, 2));
 
     try {
-      const response = await fetch(`${API_BASE_URL}/generate-video`, {
+      const response = await fetch(`${API_BASE_URL}/api/generate-video`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -233,7 +263,7 @@ export const api = {
   }): Promise<{ success: boolean; shots: any[]; error?: string }> {
     console.log('[API] 根据产品信息生成脚本...');
     try {
-      const response = await fetch(`${API_BASE_URL}/generate-script-from-product`, {
+      const response = await fetch(`${API_BASE_URL}/api/generate-script-from-product`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -254,7 +284,7 @@ export const api = {
   },
 
   /**
-   * 使用AI生成角色信息（不保存到数据库）
+   * 使用AI生成角色（不保存到数据库）
    */
   async generateCharacter(params: {
     country?: string;
@@ -310,7 +340,7 @@ export const api = {
   }> {
     console.log('[API] 保存角色到数据库...');
     try {
-      const response = await fetch(`${API_BASE_URL}/create-character`, {
+      const response = await fetch(`${API_BASE_URL}/api/create-character`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -587,6 +617,249 @@ export const api = {
         return null;
       }
       console.error('获取统计数据失败:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * 创建商品
+   */
+  async createProduct(params: {
+    user_id: string;
+    name: string;
+    category: string;
+    description?: string;  // 修改：将 usage 改为 description
+    selling_points?: string[];
+    images?: string[];
+  }): Promise<{
+    success: boolean;
+    product: {
+      id: string;
+      name: string;
+      category: string;
+      images: string[];
+      sellingPoints: string[];
+      createdAt: number;
+    };
+  }> {
+    console.log('[API] 创建商品...');
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/products`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(params),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || '创建商品失败');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('创建商品失败:', error);
+      throw error;
+    }
+  },
+
+  // 获取用户的所有商品
+  async getUserProducts(user_id: string): Promise<{
+    products: Array<{
+      id: string;
+      name: string;
+      category: string;
+      usage?: string;
+      sellingPoints?: string;
+      imageUrls?: any;
+      createdAt: number;
+    }>;
+  }> {
+    console.log('[API] 获取用户商品列表...');
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/products/${user_id}`);
+      if (!response.ok) {
+        throw new Error('获取商品列表失败');
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('获取商品列表失败:', error);
+      throw error;
+    }
+  },
+
+  // 获取用户的所有角色
+  async getUserCharacters(user_id: string): Promise<{
+    characters: Array<{
+      id: string;
+      name: string;
+      description: string;
+      age?: number;
+      gender?: string;
+      style?: string;
+      tags?: string[];
+      createdAt: number;
+    }>;
+  }> {
+    console.log('[API] 获取用户角色列表...');
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/characters/${user_id}`);
+      if (!response.ok) {
+        throw new Error('获取角色列表失败');
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('获取角色列表失败:', error);
+      throw error;
+    }
+  },
+
+  // 获取用户的所有提示词
+  async getUserPrompts(user_id: string): Promise<{
+    prompts: Array<{
+      id: string;
+      content: string;
+      productName?: string;
+      createdAt: number;
+    }>;
+  }> {
+    console.log('[API] 获取用户提示词列表...');
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/prompts/${user_id}`);
+      if (!response.ok) {
+        throw new Error('获取提示词列表失败');
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('获取提示词列表失败:', error);
+      throw error;
+    }
+  },
+
+  // 获取用户的所有视频
+  async getUserVideos(user_id: string): Promise<{
+    videos: Array<{
+      id: string;
+      url: string;
+      thumbnail?: string;
+      script?: any;
+      productName?: string;
+      status: 'processing' | 'completed' | 'failed';
+      isPublic: boolean;
+      taskId?: string;
+      progress?: number;
+      error?: string;
+      createdAt: number;
+    }>;
+  }> {
+    console.log('[API] 获取用户视频列表...');
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/videos/${user_id}`);
+      if (!response.ok) {
+        throw new Error('获取视频列表失败');
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('获取视频列表失败:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * 生成九宫格图片
+   */
+  async generateNineGrid(imageUrl: string, userId: string): Promise<{ 
+    gridUrl: string; 
+    imageId: string;
+    credits: number; 
+    consumed: number; 
+    message: string;
+  }> {
+    console.log('[API] Generating nine-grid image:', imageUrl, 'User:', userId);
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/generate-nine-grid`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          imageUrl,
+          user_id: userId 
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        console.error('[API] Generate nine-grid failed:', error);
+        throw new Error(error.detail || '九宫格图片生成失败');
+      }
+
+      const data = await response.json();
+      console.log('[API] Nine-grid generated:', data);
+      return {
+        gridUrl: data.gridUrl,
+        imageId: data.imageId,
+        credits: data.credits,
+        consumed: data.consumed,
+        message: data.message
+      };
+    } catch (error) {
+      console.error('[API] Generate nine-grid failed:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * 获取用户生成的九宫格图片列表
+   */
+  async getGeneratedImages(userId: string): Promise<{
+    success: boolean;
+    images: Array<{
+      id: string;
+      gridUrl: string;
+      originalUrl: string;
+      modelName: string;
+      creditsCost: number;
+      createdAt: number;
+      tags?: string[];
+      category?: string;
+    }>;
+  }> {
+    console.log('[API] 获取九宫格图片列表...');
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/generated-images/${userId}`);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || '获取图片列表失败');
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('获取图片列表失败:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * 删除九宫格图片记录
+   */
+  async deleteGeneratedImage(imageId: string, userId: string): Promise<{
+    success: boolean;
+    message: string;
+  }> {
+    console.log('[API] 删除九宫格图片...');
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/generated-images/${imageId}?user_id=${userId}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || '删除图片失败');
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('删除图片失败:', error);
       throw error;
     }
   }

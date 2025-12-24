@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>积分持久化测试</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; }
+    .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    h1 { color: #333; border-bottom: 2px solid #4CAF50; padding-bottom: 10px; }
+    .test-section { margin: 20px 0; padding: 15px; background: #f9f9f9; border-left: 4px solid #2196F3; }
+    .result { margin: 10px 0; padding: 10px; background: #e8f5e9; border-radius: 5px; }
+    .error { background: #ffebee; color: #c62828; }
+    button { background: #4CAF50; color: white; border: none; padding: 10px 20px; margin: 5px; cursor: pointer; border-radius: 5px; }
+    button:hover { background: #45a049; }
+    .info { color: #666; font-size: 14px; margin: 5px 0; }
+    pre { background: #263238; color: #aed581; padding: 15px; border-radius: 5px; overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🧪 积分持久化完整测试</h1>
+    
+    <div class="test-section">
+      <h3>测试步骤：</h3>
+      <button onclick="testStep1()">1. 注册新用户</button>
+      <button onclick="testStep2()">2. 消费30积分</button>
+      <button onclick="testStep3()">3. 检查数据库</button>
+      <button onclick="testStep4()">4. 模拟退出登录</button>
+      <button onclick="testStep5()">5. 重新登录验证</button>
+      <button onclick="clearLocalStorage()">🗑️ 清除缓存</button>
+    </div>
+
+    <div id="results"></div>
+
+    <div class="test-section">
+      <h3>📋 localStorage状态：</h3>
+      <pre id="localStorage-state">未加载</pre>
+      <button onclick="showLocalStorage()">刷新查看</button>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = 'http://115.190.137.87:8000';
+    let testUserId = null;
+    let testEmail = `test_${Date.now()}@example.com`;
+
+    function log(message, isError = false) {
+      const results = document.getElementById('results');
+      const div = document.createElement('div');
+      div.className = isError ? 'result error' : 'result';
+      div.innerHTML = `<strong>${new Date().toLocaleTimeString()}</strong> - ${message}`;
+      results.appendChild(div);
+      results.scrollTop = results.scrollHeight;
+    }
+
+    async function testStep1() {
+      log('🔹 步骤1：注册新用户...');
+      try {
+        const response = await fetch(`${API_BASE}/api/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: testEmail,
+            password: '123456',
+            username: '测试用户'
+          })
+        });
+        const data = await response.json();
+        testUserId = data.user.id;
+        log(`✅ 注册成功！用户ID: ${testUserId}, 初始积分: ${data.user.credits}`);
+        log(`📧 邮箱: ${testEmail}`);
+      } catch (error) {
+        log(`❌ 注册失败: ${error.message}`, true);
+      }
+    }
+
+    async function testStep2() {
+      if (!testUserId) {
+        log('❌ 请先执行步骤1', true);
+        return;
+      }
+      log('🔹 步骤2：消费30积分...');
+      try {
+        const response = await fetch(`${API_BASE}/api/credits/consume`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: testUserId,
+            amount: 30,
+            action: '测试消费',
+            description: '积分持久化测试'
+          })
+        });
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          log(`❌ HTTP ${response.status}: ${errorText}`, true);
+          return;
+        }
+        
+        const data = await response.json();
+        if (!data || data.credits === undefined) {
+          log(`❌ API返回格式错误: ${JSON.stringify(data)}`, true);
+          return;
+        }
+        
+        log(`✅ 消费成功！剩余积分: ${data.credits}, 消费: ${data.consumed}`);
+      } catch (error) {
+        log(`❌ 消费失败: ${error.message}`, true);
+      }
+    }
+
+    async function testStep3() {
+      if (!testUserId) {
+        log('❌ 请先执行步骤1', true);
+        return;
+      }
+      log('🔹 步骤3：查询数据库最新积分...');
+      try {
+        const response = await fetch(`${API_BASE}/api/credits/balance/${testUserId}`);
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          log(`❌ HTTP ${response.status}: ${errorText}`, true);
+          return;
+        }
+        
+        const data = await response.json();
+        if (!data || data.credits === undefined) {
+          log(`❌ API返回格式错误: ${JSON.stringify(data)}`, true);
+          return;
+        }
+        
+        log(`✅ 数据库积分: ${data.credits}`);
+        
+        // 查询积分历史
+        const historyResponse = await fetch(`${API_BASE}/api/credits/history/${testUserId}`);
+        if (historyResponse.ok) {
+          const historyData = await historyResponse.json();
+          if (historyData && historyData.history) {
+            log(`📜 积分历史记录: ${historyData.history.length}条`);
+            historyData.history.forEach(h => {
+              log(`   ${h.action}: ${h.amount > 0 ? '+' : ''}${h.amount} (余额: ${h.balanceAfter})`);
+            });
+          }
+        }
+      } catch (error) {
+        log(`❌ 查询失败: ${error.message}`, true);
+      }
+    }
+
+    async function testStep4() {
+      log('🔹 步骤4：模拟退出登录（清除localStorage）...');
+      localStorage.clear();
+      log('✅ localStorage已清空');
+      showLocalStorage();
+    }
+
+    async function testStep5() {
+      log('🔹 步骤5：重新登录并验证积分...');
+      try {
+        const response = await fetch(`${API_BASE}/api/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: testEmail,
+            password: '123456'
+          })
+        });
+        const data = await response.json();
+        const credits = data.user.credits;
+        log(`✅ 登录成功！返回积分: ${credits}`);
+        
+        // 模拟前端store保存
+        const mockStore = {
+          user: data.user,
+          isLoggedIn: true,
+          credits: data.user.credits
+        };
+        localStorage.setItem('app-store', JSON.stringify({ state: mockStore }));
+        log(`💾 已保存到localStorage`);
+        
+        // 验证
+        if (credits === 490) {
+          log(`🎉 积分正确！从520扣除30后为490`, false);
+        } else {
+          log(`⚠️ 积分异常！期望490，实际${credits}`, true);
+        }
+        
+        showLocalStorage();
+      } catch (error) {
+        log(`❌ 登录失败: ${error.message}`, true);
+      }
+    }
+
+    function showLocalStorage() {
+      const state = document.getElementById('localStorage-state');
+      const data = localStorage.getItem('app-store');
+      if (data) {
+        const parsed = JSON.parse(data);
+        state.textContent = JSON.stringify(parsed, null, 2);
+      } else {
+        state.textContent = '空（未登录）';
+      }
+    }
+
+    function clearLocalStorage() {
+      localStorage.clear();
+      log('🗑️ localStorage已清空');
+      showLocalStorage();
+    }
+
+    // 页面加载时显示localStorage
+    showLocalStorage();
+  </script>
+</body>
+</html>

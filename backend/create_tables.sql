@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS users (
     username VARCHAR(50) NOT NULL,
     password_hash VARCHAR(255),
     wechat_openid VARCHAR(100) UNIQUE,
-    credits INTEGER DEFAULT 520,
+    credits INTEGER DEFAULT 100,
     role VARCHAR(20) DEFAULT 'user',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

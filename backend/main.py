@@ -14,7 +14,7 @@ from datetime import datetime
 import boto3
 from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.openapi.docs import get_swagger_ui_html
@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 # 导入数据库模块
 from database import (
     get_db, test_connection, init_database,
-    User, Product, Project, Video, Character, SavedPrompt, CreditHistory
+    User, Product, Project, Video, Character, SavedPrompt, CreditHistory, GeneratedImage
 )
 
 # 导入prompt配置
@@ -70,6 +70,11 @@ VIDEO_BASE_URL = os.getenv("VIDEO_GENERATION_ENDPOINT", "https://yunwu.ai")
 CHARACTER_VIDEO_MODEL_NAME = os.getenv("CHARACTER_VIDEO_MODEL_NAME", "sora-2")
 CHARACTER_VIDEO_API_KEY = os.getenv("CHARACTER_VIDEO_API_KEY")
 CHARACTER_VIDEO_BASE_URL = os.getenv("CHARACTER_VIDEO_ENDPOINT", "https://yunwu.ai")
+
+# NanoBanana 生图模型配置
+IMAGE_GEN_MODEL_NAME = os.getenv("IMAGE_GEN_MODEL_NAME", "gemini-3-pro-image-preview")
+IMAGE_GEN_API_KEY = os.getenv("IMAGE_GEN_API_KEY")
+IMAGE_GEN_BASE_URL = os.getenv("IMAGE_GEN_BASE_URL", "https://yunwu.ai")
 
 
 if not TOS_ACCESS_KEY or not TOS_SECRET_KEY:
@@ -742,10 +747,453 @@ async def upload_image(file: UploadFile = File(...)):
 
 
 # ======================
+# 1.5 图片拼接接口
+# ======================
+
+class CombineImagesRequest(BaseModel):
+    """图片拼接请求"""
+    imageUrls: List[str]  # 图片URL列表（2-9张）
+
+class GenerateNineGridRequest(BaseModel):
+    """生成九宫格图片请求"""
+    imageUrl: str  # 原始图片URL（白底图）
+    user_id: str  # 用户ID，用于扣除积分
+
+from PIL import Image
+import math
+
+@app.post("/api/combine-images")
+async def combine_images(req: CombineImagesRequest):
+    """
+    将多张图片拼接成宫格图（2-4张→2x2，5-9张→3x3）
+    解决前端Canvas跨域问题，在后端完成图片拼接
+    """
+    image_count = len(req.imageUrls)
+    
+    # 1张图不需要拼接
+    if image_count == 1:
+        print('[拼接] 只有1张图片，无需拼接')
+        return {"gridUrl": req.imageUrls[0], "originalUrls": req.imageUrls}
+    
+    if image_count > 9:
+        raise HTTPException(status_code=400, detail="最多支持9张图片")
+    
+    # 2-4张 → 2x2宫格，5-9张 → 3x3宫格
+    grid_size = 2 if image_count <= 4 else 3
+    max_images = grid_size * grid_size
+    
+    print(f"[拼接] 开始拼接 {image_count} 张图片为 {grid_size}x{grid_size} 宫格...")
+    
+    try:
+        # 下载所有图片
+        images = []
+        for url in req.imageUrls:
+            print(f"[拼接] 下载图片: {url}")
+            response = requests.get(url, timeout=30)
+            response.raise_for_status()
+            img = Image.open(BytesIO(response.content))
+            images.append(img)
+        
+        print('[拼接] 所有图片下载完成')
+        
+        # 创建画布
+        cell_width = 400
+        cell_height = 400
+        canvas_width = cell_width * grid_size
+        canvas_height = cell_height * grid_size
+        
+        # 创建白色背景
+        canvas = Image.new('RGB', (canvas_width, canvas_height), (255, 255, 255))
+        
+        # 绘制图片
+        for i in range(min(image_count, max_images)):
+            row = i // grid_size
+            col = i % grid_size
+            x = col * cell_width
+            y = row * cell_height
+            
+            # 调整图片大小以适应单元格（保持比例，裁剪填充）
+            img = images[i]
+            scale = max(cell_width / img.width, cell_height / img.height)
+            scaled_width = int(img.width * scale)
+            scaled_height = int(img.height * scale)
+            img_resized = img.resize((scaled_width, scaled_height), Image.Resampling.LANCZOS)
+            
+            # 居中裁剪
+            offset_x = (scaled_width - cell_width) // 2
+            offset_y = (scaled_height - cell_height) // 2
+            img_cropped = img_resized.crop((offset_x, offset_y, offset_x + cell_width, offset_y + cell_height))
+            
+            # 粘贴到画布
+            canvas.paste(img_cropped, (x, y))
+            print(f"[拼接] 绘制第{i + 1}张图片: 位置({row}, {col})")
+        
+        print('[拼接] 所有图片绘制完成，开始压缩...')
+        
+        # 保存为JPEG（压缩）
+        output = BytesIO()
+        canvas.save(output, format='JPEG', quality=85)
+        output.seek(0)
+        
+        file_size = len(output.getvalue())
+        print(f"[拼接] 拼接完成，大小: {file_size / 1024:.2f} KB")
+        
+        # 上传到TOS
+        ext = ".jpg"
+        key = f"uploads/{time.strftime('%Y%m%d')}/{int(time.time()*1000)}-grid-{grid_size}x{grid_size}{ext}"
+        
+        print(f"[拼接] 开始上传到TOS: {key}")
+        result = tos_client.put_object(
+            bucket=TOS_BUCKET,
+            key=key,
+            content=output,
+            content_length=file_size,
+            content_type="image/jpeg"
+        )
+        
+        grid_url = build_public_url(TOS_BUCKET, key)
+        print(f"[拼接] 上传成功: {grid_url}")
+        
+        # 删除原图
+        print(f"[清理] 开始从桶中删除 {len(req.imageUrls)} 张原图...")
+        for url in req.imageUrls:
+            try:
+                # 从 URL提取对象键
+                parts = url.split('.com/')
+                if len(parts) >= 2:
+                    object_key = parts[1]
+                    tos_client.delete_object(bucket=TOS_BUCKET, key=object_key)
+                    print(f"[清理] ✅ 删除成功: {object_key}")
+            except Exception as e:
+                print(f"[清理] ⚠️ 删除失败: {url}, 错误: {str(e)}")
+        
+        print(f"✅ {grid_size}x{grid_size}宫格拼接并上传成功！")
+        
+        return {
+            "gridUrl": grid_url,
+            "gridSize": f"{grid_size}x{grid_size}",
+            "originalUrls": req.imageUrls
+        }
+        
+    except requests.RequestException as e:
+        print(f"[拼接] 下载图片失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"下载图片失败: {str(e)}")
+    except Exception as e:
+        print(f"[拼接] 拼接失败: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"图片拼接失败: {str(e)}")
+
+
+# ======================
+# 1.6 NanoBanana九宫格图片生成
+# ======================
+
+@app.post("/api/generate-nine-grid")
+async def generate_nine_grid(req: GenerateNineGridRequest, db: Session = Depends(get_db)):
+    """
+    使用Gemini gemini-3-pro-image-preview生成九宫格图片
+    输入：一张白底图
+    输出：一张包含9个视角的2K高清九宫格图片
+    消耗：50积分
+    """
+    if not IMAGE_GEN_API_KEY:
+        raise HTTPException(status_code=500, detail="生图模型未配置")
+    
+    # 1. 先检查积分是否足够
+    CREDITS_COST = 50  # 生成九宫格图片消耇50积分
+    
+    user = db.query(User).filter(User.id == req.user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    
+    if user.credits < CREDITS_COST:
+        raise HTTPException(
+            status_code=400,
+            detail=f"积分不足！当前积分：{user.credits}，需要：{CREDITS_COST}"
+        )
+    
+    print(f"[九宫格] 开始生成九宫格图片...")
+    print(f"[九宫格] 用户ID: {req.user_id}, 当前积分: {user.credits}")
+    print(f"[九宫格] 原始图片: {req.imageUrl}")
+    
+    try:
+        # 下载原始图片并转换为base64
+        print(f"[九宫格] 下载原始图片...")
+        img_response = requests.get(req.imageUrl, timeout=30)
+        img_response.raise_for_status()
+        
+        # 转换为base64
+        import base64
+        import json
+        image_base64 = base64.b64encode(img_response.content).decode('utf-8')
+        
+        # 构造Gemini原生格式的请求
+        prompt = f"""请为这个商品生成一张包含9个不同角度视图的3x3九宫格产品展示图片。
+
+要求：
+1. 图片尺寸：1920x1920像素（2K高清）
+2. 3x3网格布局，共9个视角：
+   - 第1行：左侧视角、顶部俯视图、右侧视角
+   - 第2行：左前45度角、正面视角、右前45度角
+   - 第3行：左后45度角、底部视图、右后45度角
+3. 所有视角都展示同一个产品
+4. 保持白色或浅灰色简洁背景
+5. 每个视角的产品大小、光照、材质保持一致
+6. 每个小格尺寸相同，排列整齐
+7. 不要添加任何文字、标注、细节特写或使用场景
+8. 纯产品多角度展示，就像电商产品图
+
+请生成一张完整的3x3宫格图片，不要分开生成。"""
+        
+        print(f"[九宫格] 调用Gemini API...")
+        print(f"[九宫格] 模型: {IMAGE_GEN_MODEL_NAME}")
+        print(f"[九宫格] Base URL: {IMAGE_GEN_BASE_URL}")
+        
+        # 根据API文档，使用正确的调用格式
+        api_url = f"{IMAGE_GEN_BASE_URL}/v1beta/models/{IMAGE_GEN_MODEL_NAME}:generateContent"
+        
+        headers = {
+            "Content-Type": "application/json"
+        }
+        
+        # 根据API文档，使用查询参数传递key
+        params = {
+            "key": IMAGE_GEN_API_KEY
+        }
+        
+        payload = {
+            "contents": [
+                {
+                    "parts": [
+                        {
+                            "text": prompt
+                        },
+                        {
+                            "inline_data": {
+                                "mime_type": "image/jpeg",
+                                "data": image_base64
+                            }
+                        }
+                    ]
+                }
+            ],
+            "generationConfig": {
+                "responseModalities": ["image"],
+                "imageConfig": {
+                    "aspectRatio": "1:1"  # 正方形宽高比
+                }
+            }
+        }
+        
+        print(f"[九宫格] 发送请求到: {api_url}")
+        response = requests.post(api_url, headers=headers, params=params, json=payload, timeout=120)
+        
+        if response.status_code != 200:
+            error_text = response.text
+            print(f"[九宫格] API错误: {error_text}")
+            raise HTTPException(status_code=response.status_code, detail=f"Gemini API调用失败: {error_text}")
+        
+        result = response.json()
+        print(f"[九宫格] API完整响应: {json.dumps(result, indent=2, ensure_ascii=False)}")
+        
+        # 解析返回的图片数据
+        if 'candidates' in result and len(result['candidates']) > 0:
+            candidate = result['candidates'][0]
+            print(f"[九宫格] candidate结构: {json.dumps(candidate, indent=2, ensure_ascii=False)}")
+            
+            if 'content' in candidate and 'parts' in candidate['content']:
+                parts = candidate['content']['parts']
+                print(f"[九宫格] parts数量: {len(parts)}")
+                
+                for i, part in enumerate(parts):
+                    print(f"[九宫格] part[{i}]的keys: {part.keys()}")
+                    
+                    # Gemini API返回的是 inlineData（驼峰命名），不是 inline_data
+                    if 'inlineData' in part:
+                        # 获取生成的图片base64数据
+                        generated_image_base64 = part['inlineData']['data']
+                        print(f"[九宫格] 获取到base64数据，长度: {len(generated_image_base64)}")
+                        
+                        # 解码base64为二进制
+                        img_data = base64.b64decode(generated_image_base64)
+                        file_size = len(img_data)
+                        
+                        # 上传到TOS
+                        ext = ".jpg"
+                        key = f"uploads/{time.strftime('%Y%m%d')}/{int(time.time()*1000)}-nine-grid{ext}"
+                        
+                        print(f"[九宫格] 上传到TOS: {key}")
+                        print(f"[九宫格] 文件大小: {file_size / 1024:.2f} KB")
+                        
+                        tos_result = tos_client.put_object(
+                            bucket=TOS_BUCKET,
+                            key=key,
+                            content=BytesIO(img_data),
+                            content_length=file_size,
+                            content_type="image/jpeg"
+                        )
+                        
+                        grid_url = build_public_url(TOS_BUCKET, key)
+                        print(f"[九宫格] 上传成功: {grid_url}")
+                        
+                        # 2. 图片生成成功，扣除积分
+                        old_credits = user.credits
+                        user.credits -= CREDITS_COST
+                        
+                        # 3. 记录积分历史
+                        credit_history = CreditHistory(
+                            id=str(uuid.uuid4()),
+                            user_id=req.user_id,
+                            action="生成九宫格图片",
+                            amount=-CREDITS_COST,
+                            balance_after=user.credits,
+                            description=f"生成九宫格图片消耗 {CREDITS_COST} 积分"
+                        )
+                        db.add(credit_history)
+                        
+                        # 4. 保存生成的图片记录到数据库
+                        generated_image = GeneratedImage(
+                            id=str(uuid.uuid4()),
+                            user_id=req.user_id,
+                            original_url=req.imageUrl,
+                            grid_url=grid_url,
+                            model_name=IMAGE_GEN_MODEL_NAME,
+                            credits_cost=CREDITS_COST,
+                            status='completed'
+                        )
+                        db.add(generated_image)
+                        db.commit()
+                        
+                        print(f"[九宫格] 积分扣除成功: {old_credits} -> {user.credits}")
+                        print(f"[九宫格] 图片记录已保存: {generated_image.id}")
+                        print(f"✅ 九宫格图片生成并上传成功！")
+                        
+                        return {
+                            "success": True,
+                            "gridUrl": grid_url,
+                            "originalUrl": req.imageUrl,
+                            "imageId": generated_image.id,
+                            "credits": user.credits,
+                            "consumed": CREDITS_COST,
+                            "message": f"九宫格图片生成成功，消耗{CREDITS_COST}积分，剩余{user.credits}积分"
+                        }
+
+        # 如果没有找到图片数据，打印完整响应帮助调试
+        print(f"[九宫格] 未找到图片数据，完整响应结构:")
+        print(f"  - 是否有candidates: {'candidates' in result}")
+        if 'candidates' in result:
+            print(f"  - candidates数量: {len(result['candidates'])}")
+        raise HTTPException(status_code=500, detail="Gemini API返回格式异常，未找到生成的图片")
+        
+    except requests.exceptions.Timeout:
+        print(f"[九宫格] API请求超时")
+        raise HTTPException(status_code=504, detail="Gemini API请求超时，请稍后重试")
+    except requests.exceptions.RequestException as e:
+        print(f"[九宫格] 网络请求错误: {e}")
+        raise HTTPException(status_code=500, detail=f"网络请求失败: {str(e)}")
+    except Exception as e:
+        print(f"[九宫格] 生成失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"九宫格图片生成失败: {str(e)}")
+
+
+@app.get("/api/generated-images/{user_id}")
+async def get_generated_images(user_id: str, db: Session = Depends(get_db)):
+    """
+    获取用户生成的九宫格图片列表
+    """
+    print(f"[API] 获取用户 {user_id} 的九宫格图片列表")
+    
+    try:
+        # 查询用户的所有成功生成的九宫格图片
+        images = db.query(GeneratedImage).filter(
+            GeneratedImage.user_id == user_id,
+            GeneratedImage.status == 'completed'
+        ).order_by(GeneratedImage.created_at.desc()).all()
+        
+        print(f"[API] 找到 {len(images)} 张九宫格图片")
+        
+        return {
+            "success": True,
+            "images": [
+                {
+                    "id": img.id,
+                    "gridUrl": img.grid_url,
+                    "originalUrl": img.original_url,
+                    "modelName": img.model_name,
+                    "creditsCost": img.credits_cost,
+                    "createdAt": int(img.created_at.timestamp() * 1000),
+                    "tags": img.tags or [],
+                    "category": img.category
+                }
+                for img in images
+            ]
+        }
+    except Exception as e:
+        print(f"[API] 获取九宫格图片列表失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/generated-images/{image_id}")
+async def delete_generated_image(image_id: str, user_id: str, db: Session = Depends(get_db)):
+    """
+    删除生成的九宫格图片记录（可选功能）
+    """
+    print(f"[API] 删除九宫格图片: {image_id}")
+    
+    try:
+        # 查询图片记录
+        image = db.query(GeneratedImage).filter(
+            GeneratedImage.id == image_id,
+            GeneratedImage.user_id == user_id
+        ).first()
+        
+        if not image:
+            raise HTTPException(status_code=404, detail="图片记录不存在")
+        
+        # 删除数据库记录（不删除TOS上的实际文件，保留以防万一）
+        db.delete(image)
+        db.commit()
+        
+        print(f"[API] 九宫格图片记录已删除")
+        return {
+            "success": True,
+            "message": "图片记录已删除"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[API] 删除失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+        
+        # 如果没有找到图片数据，打印完整响应帮助调试
+        print(f"[九宫格] 未找到图片数据，完整响应结构:")
+        print(f"  - 是否有candidates: {'candidates' in result}")
+        if 'candidates' in result:
+            print(f"  - candidates数量: {len(result['candidates'])}")
+            if len(result['candidates']) > 0:
+                print(f"  - candidate[0]的keys: {result['candidates'][0].keys()}")
+        raise HTTPException(status_code=500, detail="Gemini API返回格式异常，未找到生成的图片")
+        
+    except requests.RequestException as e:
+        print(f"[九宫格] 网络请求失败: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"网络请求失败: {str(e)}")
+    except Exception as e:
+        print(f"[九宫格] 生成失败: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"九宫格图片生成失败: {str(e)}")
+
+
+# ======================
 # 2. AI 聊天接口
 # ======================
 
-@app.post("/chat", response_model=ChatResponse)
+@app.post("/api/chat", response_model=ChatResponse)
 async def send_chat(req: ChatRequest):
     content = req.content
     lower = content.lower()
@@ -826,7 +1274,7 @@ async def send_chat(req: ChatRequest):
 # 3. 一次性生成脚本（新架构）
 # ======================
 
-@app.post("/generate-script")
+@app.post("/api/generate-script")
 async def generate_script(req: GenerateScriptRequest):
     """
     基于产品信息+图片，一次性生成完整视频脚本
@@ -1013,7 +1461,7 @@ async def generate_video(req: GenerateVideoRequest):
         raise HTTPException(status_code=500, detail=f"视频生成失败: {str(e)}")
 
 
-@app.post("/query-video-task")
+@app.post("/api/query-video-task")
 async def query_video_task(req: VideoTaskRequest):
     """
     查询视频生成任务状态（POST版本，保留兼容）
@@ -1319,7 +1767,7 @@ class CreateCharacterRequest(BaseModel):
     tags: Optional[List[str]] = None
 
 
-@app.post("/create-character")
+@app.post("/api/create-character")
 async def create_character(req: CreateCharacterRequest, db: Session = Depends(get_db)):
     """
     创建角色（保存到数据库）
@@ -1695,11 +2143,6 @@ async def update_user_credits(user_id: str, credits: int, db: Session = Depends(
         db.rollback()
         print(f"更新用户积分失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
 
 
 # ======================
@@ -2227,38 +2670,43 @@ async def create_product(req: CreateProductRequest, db: Session = Depends(get_db
     """
     try:
         product_id = str(uuid.uuid4())
+        
+        # 将 selling_points 列表转换为文本（用逗号分隔）
+        selling_points_text = ', '.join(req.selling_points) if req.selling_points else ''
+        
         new_product = Product(
             id=product_id,
             user_id=req.user_id,
             name=req.name,
-            description=req.description,
+            usage=req.description,  # 修复：将 description 映射到 usage 字段
             category=req.category,
-            price=req.price,
-            images=req.images,
-            specs=req.specs,
-            selling_points=req.selling_points
+            selling_points=selling_points_text,  # 修复：转换为文本
+            image_urls=req.images  # 修复：字段名是 image_urls
         )
         db.add(new_product)
         db.commit()
         db.refresh(new_product)
+        
+        # 返回时转换回列表格式
+        selling_points_list = selling_points_text.split(', ') if selling_points_text else []
         
         return {
             "success": True,
             "product": {
                 "id": new_product.id,
                 "name": new_product.name,
-                "description": new_product.description,
+                "description": new_product.usage,  # 返回时映射回去
                 "category": new_product.category,
-                "price": new_product.price,
-                "images": new_product.images,
-                "specs": new_product.specs,
-                "sellingPoints": new_product.selling_points,
+                "images": new_product.image_urls,
+                "sellingPoints": selling_points_list,
                 "createdAt": new_product.created_at.timestamp() * 1000 if new_product.created_at else None
             }
         }
     except Exception as e:
         db.rollback()
         print(f"创建商品失败: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/products/{user_id}")
@@ -2273,12 +2721,10 @@ async def get_user_products(user_id: str, db: Session = Depends(get_db)):
                 {
                     "id": p.id,
                     "name": p.name,
-                    "description": p.description,
                     "category": p.category,
-                    "price": p.price,
-                    "images": p.images,
-                    "specs": p.specs,
-                    "sellingPoints": p.selling_points,
+                    "usage": p.usage,  # 修复：使用 usage 字段而不是 description
+                    "sellingPoints": p.selling_points,  # 修复：返回 selling_points
+                    "imageUrls": p.image_urls,  # 修复：使用 image_urls 字段
                     "createdAt": p.created_at.timestamp() * 1000 if p.created_at else None,
                     "updatedAt": p.updated_at.timestamp() * 1000 if p.updated_at else None
                 }
@@ -2287,6 +2733,8 @@ async def get_user_products(user_id: str, db: Session = Depends(get_db)):
         }
     except Exception as e:
         print(f"获取商品列表失败: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/product/{product_id}")
@@ -2302,12 +2750,10 @@ async def get_product_detail(product_id: str, db: Session = Depends(get_db)):
         return {
             "id": product.id,
             "name": product.name,
-            "description": product.description,
             "category": product.category,
-            "price": product.price,
-            "images": product.images,
-            "specs": product.specs,
+            "usage": product.usage,  # 修复：使用 usage 字段
             "sellingPoints": product.selling_points,
+            "imageUrls": product.image_urls,  # 修复：使用 image_urls 字段
             "createdAt": product.created_at.timestamp() * 1000 if product.created_at else None,
             "updatedAt": product.updated_at.timestamp() * 1000 if product.updated_at else None
         }
@@ -2315,6 +2761,8 @@ async def get_product_detail(product_id: str, db: Session = Depends(get_db)):
         raise
     except Exception as e:
         print(f"获取商品详情失败: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.put("/api/product/{product_id}")
@@ -2388,4 +2836,231 @@ async def delete_product(product_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ======================
+# 图片管理 API
+# ======================
 
+class DeleteImageRequest(BaseModel):
+    url: str
+
+@app.post("/api/delete-image")
+async def delete_image(req: DeleteImageRequest):
+    """
+    从 TOS 删除图片
+    """
+    try:
+        # 从 URL提取对象键
+        # URL 格式：https://{bucket}.{region}.tos.volces.com/{key}
+        url = req.url
+        if not url:
+            raise HTTPException(status_code=400, detail="图片URL不能为空")
+        
+        # 解析URL提取object_key
+        # 例: https://soradirector-public.cn-beijing.tos.volces.com/uploads/xxx.jpg
+        # 提取: uploads/xxx.jpg
+        parts = url.split('.com/')
+        if len(parts) < 2:
+            raise HTTPException(status_code=400, detail="无效的图片URL")
+        
+        object_key = parts[1]
+        print(f"[DELETE IMAGE] 开始删除图片: {object_key}")
+        
+        # 从 TOS 删除
+        tos_client.delete_object(bucket=TOS_BUCKET, key=object_key)
+        
+        print(f"[DELETE IMAGE] ✅ 图片删除成功: {object_key}")
+        return {"success": True, "message": "图片删除成功"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[DELETE IMAGE] ❗ 删除图片失败: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        # 删除失败不抛出异常，返回false即可
+        return {"success": False, "message": f"删除失败: {str(e)}"}
+
+
+# ======================
+# 微信支付 API
+# ======================
+
+from wechat_pay import create_native_order, verify_callback, query_order, xml_to_dict
+
+class CreateOrderRequest(BaseModel):
+    """创建订单请求"""
+    package_id: str  # 套餐ID: small, medium, large, super
+    user_id: str
+
+class OrderResponse(BaseModel):
+    """订单响应"""
+    success: bool
+    order_no: Optional[str] = None
+    qr_code_url: Optional[str] = None  # 二维码链接
+    amount: Optional[float] = None  # 支付金额（元）
+    credits: Optional[int] = None  # 获得积分
+    error: Optional[str] = None
+
+# 充值套餐配置
+PACKAGES = {
+    'small': {'amount': 10, 'credits': 100, 'name': '小额充值'},
+    'medium': {'amount': 50, 'credits': 520, 'name': '标准充值'},
+    'large': {'amount': 100, 'credits': 1100, 'name': '超值充值'},
+    'super': {'amount': 500, 'credits': 5800, 'name': '高级充值'},
+}
+
+@app.post("/api/wechat/create-order")
+async def create_wechat_order(req: CreateOrderRequest, db: Session = Depends(get_db)):
+    """
+    创建微信支付订单（Native扫码支付）
+    """
+    # 获取套餐信息
+    package = PACKAGES.get(req.package_id)
+    if not package:
+        raise HTTPException(status_code=400, detail="无效的套餐ID")
+    
+    # 生成订单号（时间戳+随机数）
+    order_no = f"WX{int(time.time())}{uuid.uuid4().hex[:8].upper()}"
+    
+    # 金额转换为分
+    total_fee = int(package['amount'] * 100)
+    
+    # 调用微信支付API创建订单
+    result = create_native_order(
+        order_no=order_no,
+        total_fee=total_fee,
+        body=f"{package['name']} - {package['credits']}积分",
+        attach=req.user_id  # 将user_id作为附加数据
+    )
+    
+    if not result['success']:
+        raise HTTPException(status_code=500, detail=result.get('error', '创建订单失败'))
+    
+    # 保存订单到数据库（需要先创建Order表）
+    # TODO: 添加到数据库
+    # order = Order(
+    #     id=str(uuid.uuid4()),
+    #     user_id=req.user_id,
+    #     order_no=order_no,
+    #     amount=package['amount'],
+    #     credits=package['credits'],
+    #     status='pending',
+    #     payment_method='wechat'
+    # )
+    # db.add(order)
+    # db.commit()
+    
+    return {
+        'success': True,
+        'order_no': order_no,
+        'qr_code_url': result['code_url'],
+        'amount': package['amount'],
+        'credits': package['credits']
+    }
+
+@app.post("/api/wechat/callback")
+async def wechat_pay_callback(request: Request, db: Session = Depends(get_db)):
+    """
+    微信支付回调通知
+    """
+    # 读取XML数据
+    xml_data = await request.body()
+    data = xml_to_dict(xml_data.decode('utf-8'))
+    
+    print(f"[WECHAT CALLBACK] 收到回调: {data}")
+    
+    # 验证签名
+    if not verify_callback(data):
+        print("[WECHAT CALLBACK] 签名验证失败")
+        return Response(
+            content="<xml><return_code><![CDATA[FAIL]]></return_code><return_msg><![CDATA[签名验证失败]]></return_msg></xml>",
+            media_type="application/xml"
+        )
+    
+    # 检查支付状态
+    if data.get('return_code') == 'SUCCESS' and data.get('result_code') == 'SUCCESS':
+        order_no = data.get('out_trade_no')
+        transaction_id = data.get('transaction_id')
+        total_fee = int(data.get('total_fee', 0))
+        user_id = data.get('attach')  # 从附加数据获取user_id
+        
+        print(f"[WECHAT CALLBACK] 支付成功: {order_no}, 用户: {user_id}, 金额: {total_fee}分")
+        
+        # TODO: 更新订单状态
+        # order = db.query(Order).filter(Order.order_no == order_no).first()
+        # if order and order.status == 'pending':
+        #     order.status = 'paid'
+        #     order.transaction_id = transaction_id
+        #     order.paid_at = datetime.utcnow()
+        #     db.commit()
+        
+        # 给用户充值积分（根据金额计算积分）
+        # 查找对应的套餐
+        amount_yuan = total_fee / 100
+        credits_to_add = 0
+        
+        for package in PACKAGES.values():
+            if package['amount'] == amount_yuan:
+                credits_to_add = package['credits']
+                break
+        
+        if credits_to_add > 0 and user_id:
+            try:
+                # 给用户加积分
+                user = db.query(User).filter(User.id == user_id).first()
+                if user:
+                    old_credits = user.credits
+                    user.credits += credits_to_add
+                    
+                    # 记录积分历史
+                    history = CreditHistory(
+                        id=str(uuid.uuid4()),
+                        user_id=user_id,
+                        action='recharge',
+                        amount=credits_to_add,
+                        balance_after=user.credits,
+                        description=f"微信支付充值￥{amount_yuan}",
+                        related_id=order_no
+                    )
+                    db.add(history)
+                    db.commit()
+                    
+                    print(f"[WECHAT CALLBACK] ✅ 积分充值成功: {old_credits} -> {user.credits} (+{credits_to_add})")
+            except Exception as e:
+                print(f"[WECHAT CALLBACK] 积分充值失败: {e}")
+                db.rollback()
+    
+    # 返回SUCCESS给微信
+    return Response(
+        content="<xml><return_code><![CDATA[SUCCESS]]></return_code><return_msg><![CDATA[OK]]></return_msg></xml>",
+        media_type="application/xml"
+    )
+
+@app.get("/api/wechat/query-order/{order_no}")
+async def query_wechat_order(order_no: str):
+    """
+    查询订单支付状态
+    """
+    result = query_order(order_no)
+    
+    if not result['success']:
+        return {
+            'success': False,
+            'error': result.get('error', '查询失败')
+        }
+    
+    return {
+        'success': True,
+        'order_no': order_no,
+        'status': result['trade_state'],  # SUCCESS/NOTPAY/CLOSED/...
+        'paid': result['trade_state'] == 'SUCCESS'
+    }
+
+
+# ======================
+# 启动服务
+# ======================
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

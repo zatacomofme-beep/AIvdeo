@@ -24,10 +24,17 @@ export function UserCenter({ isOpen, onClose, onLogout }: UserCenterProps) {
   });
   const [statsLoading, setStatsLoading] = useState(true);
 
+  // 新增：充值记录和使用记录状态
+  const [billingHistory, setBillingHistory] = useState<any[]>([]);
+  const [usageHistory, setUsageHistory] = useState<any[]>([]);
+  const [billingLoading, setBillingLoading] = useState(true);
+  const [historyLoading, setHistoryLoading] = useState(true);
+
   // 获取用户统计数据
   useEffect(() => {
     if (isOpen && user) {
       fetchUserStats();
+      fetchCreditsHistory();  // 新增：加载积分历史
     }
   }, [isOpen, user]);
 
@@ -45,7 +52,6 @@ export function UserCenter({ isOpen, onClose, onLogout }: UserCenterProps) {
         });
       } else {
         console.warn('统计API返回null，使用默认值');
-        // 使用默认值
       }
     } catch (error) {
       console.error('获取统计数据失败:', error);
@@ -54,7 +60,59 @@ export function UserCenter({ isOpen, onClose, onLogout }: UserCenterProps) {
     }
   };
 
-  if (!isOpen || !user) return null;
+  // 新增：获取积分历史（充值+使用）
+  const fetchCreditsHistory = async () => {
+    if (!user) return;
+    
+    setBillingLoading(true);
+    setHistoryLoading(true);
+    
+    try {
+      const data = await api.getCreditsHistory(user.id);
+      
+      // 分离充值记录（amount > 0）和使用记录（amount < 0）
+      const recharges = data.history.filter((item: any) => item.amount > 0);
+      const usages = data.history.filter((item: any) => item.amount < 0);
+      
+      setBillingHistory(recharges);
+      setUsageHistory(usages);
+      
+      console.log('✅ 加载积分历史成功:', {
+        充值记录: recharges.length,
+        使用记录: usages.length
+      });
+    } catch (error) {
+      console.error('获取积分历史失败:', error);
+    } finally {
+      setBillingLoading(false);
+      setHistoryLoading(false);
+    }
+  };
+
+  // 格式化时间
+  const formatDate = (timestamp: number) => {
+    const date = new Date(timestamp);
+    return date.toLocaleDateString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  // 获取操作类型显示名称
+  const getActionLabel = (action: string) => {
+    const actionMap: Record<string, string> = {
+      'recharge': '充值',
+      'generate_video': '生成视频',
+      'generate_script': '生成脚本',
+      'generate_nine_grid': '生成九宫格',
+      'create_character': '创建角色',
+      'manual_adjust': '管理员调整'
+    };
+    return actionMap[action] || action;
+  };
 
   const tabs = [
     { id: 'profile', label: '个人资料', icon: User },
@@ -62,23 +120,13 @@ export function UserCenter({ isOpen, onClose, onLogout }: UserCenterProps) {
     { id: 'history', label: '使用记录', icon: History },
   ];
 
-  // Mock data for demonstration
-  const billingHistory = [
-    { id: '1', amount: 500, credits: 500, date: '2024-12-19', method: '支付宝' },
-    { id: '2', amount: 200, credits: 200, date: '2024-12-15', method: '微信支付' },
-  ];
-
-  const usageHistory = [
-    { id: '1', action: '生成视频', cost: 50, date: '2024-12-19 14:30' },
-    { id: '2', action: '生成脚本', cost: 10, date: '2024-12-19 14:25' },
-    { id: '3', action: '生成视频', cost: 50, date: '2024-12-18 16:20' },
-  ];
-
   const handleSaveProfile = () => {
     // TODO: 调用API更新用户信息
     console.log('保存用户信息:', editedUsername);
     setIsEditing(false);
   };
+
+  if (!isOpen || !user) return null;
 
   return (
     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50">
@@ -245,7 +293,11 @@ export function UserCenter({ isOpen, onClose, onLogout }: UserCenterProps) {
             <div className="space-y-4">
               <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
                 <h3 className="text-sm font-semibold text-slate-700 mb-3">充值记录</h3>
-                {billingHistory.length > 0 ? (
+                {billingLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-2 border-yellow-500 border-t-transparent" />
+                  </div>
+                ) : billingHistory.length > 0 ? (
                   <div className="space-y-2">
                     {billingHistory.map((record) => (
                       <div
@@ -253,13 +305,25 @@ export function UserCenter({ isOpen, onClose, onLogout }: UserCenterProps) {
                         className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100"
                       >
                         <div>
-                          <div className="text-sm font-medium text-slate-800">充值 {record.credits} Credits</div>
-                          <div className="text-xs text-slate-500 mt-1">
-                            {record.date} · {record.method}
+                          <div className="text-sm font-medium text-slate-800">
+                            {getActionLabel(record.action)}
                           </div>
+                          <div className="text-xs text-slate-500 mt-1">
+                            {formatDate(record.createdAt)}
+                          </div>
+                          {record.description && (
+                            <div className="text-xs text-slate-400 mt-0.5">
+                              {record.description}
+                            </div>
+                          )}
                         </div>
-                        <div className="text-lg font-semibold text-green-600">
-                          +¥{record.amount}
+                        <div className="text-right">
+                          <div className="text-lg font-semibold text-green-600">
+                            +{record.amount}
+                          </div>
+                          <div className="text-xs text-slate-400">
+                            余额 {record.balanceAfter}
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -278,7 +342,11 @@ export function UserCenter({ isOpen, onClose, onLogout }: UserCenterProps) {
             <div className="space-y-4">
               <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
                 <h3 className="text-sm font-semibold text-slate-700 mb-3">使用记录</h3>
-                {usageHistory.length > 0 ? (
+                {historyLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-2 border-cyan-500 border-t-transparent" />
+                  </div>
+                ) : usageHistory.length > 0 ? (
                   <div className="space-y-2">
                     {usageHistory.map((record) => (
                       <div
@@ -286,11 +354,25 @@ export function UserCenter({ isOpen, onClose, onLogout }: UserCenterProps) {
                         className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100"
                       >
                         <div>
-                          <div className="text-sm font-medium text-slate-800">{record.action}</div>
-                          <div className="text-xs text-slate-500 mt-1">{record.date}</div>
+                          <div className="text-sm font-medium text-slate-800">
+                            {getActionLabel(record.action)}
+                          </div>
+                          <div className="text-xs text-slate-500 mt-1">
+                            {formatDate(record.createdAt)}
+                          </div>
+                          {record.description && (
+                            <div className="text-xs text-slate-400 mt-0.5">
+                              {record.description}
+                            </div>
+                          )}
                         </div>
-                        <div className="text-lg font-semibold text-red-500">
-                          -{record.cost} Credits
+                        <div className="text-right">
+                          <div className="text-lg font-semibold text-red-500">
+                            {record.amount}
+                          </div>
+                          <div className="text-xs text-slate-400">
+                            余额 {record.balanceAfter}
+                          </div>
                         </div>
                       </div>
                     ))}

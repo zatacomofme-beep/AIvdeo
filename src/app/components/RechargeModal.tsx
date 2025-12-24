@@ -18,35 +18,43 @@ export function RechargeModal({ isOpen, onClose, onRecharge }: RechargeModalProp
   const packages = [
     { 
       id: 1, 
-      credits: 1000, 
+      credits: 100, 
       price: 10, 
-      label: '入门套餐',
+      label: '小额充值',
       bonus: 0,
-      popular: false
+      popular: false,
+      icon: '💳',
+      desc: '新手入门'
     },
     { 
       id: 2, 
-      credits: 5000, 
+      credits: 520, 
       price: 49, 
-      label: '进阶套餐',
-      bonus: 0,
-      popular: true
+      label: '标准充倽',
+      bonus: 20,
+      popular: true,
+      icon: '⭐',
+      desc: '最受欢迎'
     },
     { 
       id: 3, 
-      credits: 12000, 
+      credits: 1100, 
       price: 99, 
-      label: '专业套餐',
-      bonus: 0,
-      popular: false
+      label: '超值充值',
+      bonus: 100,
+      popular: false,
+      icon: '🚀',
+      desc: '额外赠送10%'
     },
     { 
       id: 4, 
-      credits: 23000, 
-      price: 199, 
-      label: '企业套餐',
-      bonus: 0,
-      popular: false
+      credits: 5800, 
+      price: 499, 
+      label: '高级充值',
+      bonus: 800,
+      popular: false,
+      icon: '💎',
+      desc: '额外赠送16%'
     },
   ];
 
@@ -66,55 +74,67 @@ export function RechargeModal({ isOpen, onClose, onRecharge }: RechargeModalProp
       onRecharge(selectedPkg.price, totalCredits, paymentMethod === 'alipay' ? '支付宝' : '微信支付');
       setIsProcessing(false);
       onClose();
-      alert(`✅ 充值成功！\n获得 ${totalCredits} Credits`);
+      alert(`✅ 充值成功！\n获得 ${totalCredits} 积分`);
     }, 2000);
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="w-[700px] max-h-[90vh] bg-white border border-slate-200 rounded-xl shadow-2xl flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="h-16 flex items-center justify-between px-6 border-b border-slate-100 shrink-0 bg-slate-50/50">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-yellow-400 rounded-lg flex items-center justify-center shadow-md shadow-yellow-500/20">
-              <Zap className="text-white" size={18} />
+    <div className="fixed inset-0 bg-gradient-to-br from-slate-900/60 via-purple-900/40 to-blue-900/60 backdrop-blur-md flex items-center justify-center z-50 animate-in fade-in duration-300">
+      <div className="w-[850px] max-h-[90vh] bg-white/95 backdrop-blur-xl border border-white/40 rounded-3xl shadow-2xl shadow-purple-500/20 flex flex-col overflow-hidden">
+        {/* Header with Gradient */}
+        <div className="relative h-24 flex items-center justify-between px-8 border-b border-white/20 shrink-0 overflow-hidden">
+          {/* Background */}
+          <div className="absolute inset-0 bg-gradient-to-r from-purple-500/10 via-blue-500/10 to-cyan-500/10" />
+          <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-30" />
+            
+          <div className="relative flex items-center gap-4">
+            <div className="w-16 h-16 bg-gradient-to-br from-yellow-400 via-amber-500 to-orange-500 rounded-2xl flex items-center justify-center shadow-lg shadow-yellow-500/30 text-white text-3xl">
+              ⚡
             </div>
-            <h2 className="font-semibold text-lg text-slate-800">充值 Credits</h2>
+            <div>
+              <h2 className="font-black text-2xl text-slate-900">充值中心</h2>
+              <p className="text-sm text-slate-500 mt-0.5">选择套餐，释放创意</p>
+            </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors"
+            className="relative p-3 text-slate-400 hover:text-slate-700 hover:bg-white/60 rounded-xl transition-all hover:scale-110"
           >
-            <X size={20} />
+            <X size={24} />
           </button>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6 bg-slate-50/30">
-          {/* Info Banner */}
-          <div className="bg-gradient-to-r from-yellow-50 to-amber-50 border border-yellow-200 rounded-lg p-4 mb-6">
-            <div className="flex items-start gap-3">
-              <Zap className="text-yellow-500 shrink-0 mt-0.5" size={20} />
-              <div>
-                <p className="text-sm text-yellow-700 font-bold mb-2">
-                  ✨ Credits 使用说明
+        <div className="flex-1 overflow-y-auto p-8 bg-gradient-to-br from-slate-50/50 via-purple-50/30 to-blue-50/30">
+          {/* Info Banner with Glass Effect */}
+          <div className="relative bg-gradient-to-r from-yellow-400/20 via-amber-400/20 to-orange-400/20 backdrop-blur-sm border border-yellow-300/40 rounded-2xl p-6 mb-8 overflow-hidden shadow-lg shadow-yellow-500/10">
+            <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20" />
+            <div className="relative flex items-start gap-4">
+              <div className="w-14 h-14 bg-gradient-to-br from-yellow-400 to-amber-500 rounded-xl flex items-center justify-center shadow-lg shadow-yellow-500/30 shrink-0 text-3xl">
+                💡
+              </div>
+              <div className="flex-1">
+                <p className="text-base text-yellow-900 font-bold mb-3">
+                  ✨ 积分使用说明
                 </p>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="bg-white/60 rounded px-2 py-1.5">
-                    <span className="text-yellow-700 font-bold">生成脚本</span>
-                    <span className="text-yellow-600 ml-2">30 Credits/次</span>
+                <div className="grid grid-cols-3 gap-3 text-sm">
+                  <div className="bg-white/80 backdrop-blur-sm rounded-xl px-3 py-2.5 shadow-sm hover:shadow-md transition-shadow">
+                    <div className="text-yellow-700 font-bold text-xs mb-1">生成脚本</div>
+                    <div className="text-yellow-600 font-semibold">30 积分</div>
                   </div>
-                  <div className="bg-white/60 rounded px-2 py-1.5">
-                    <span className="text-yellow-700 font-bold">生成视频</span>
-                    <span className="text-yellow-600 ml-2">70 Credits/次</span>
+                  <div className="bg-white/80 backdrop-blur-sm rounded-xl px-3 py-2.5 shadow-sm hover:shadow-md transition-shadow">
+                    <div className="text-yellow-700 font-bold text-xs mb-1">生成视频</div>
+                    <div className="text-yellow-600 font-semibold">70 积分</div>
                   </div>
-                  <div className="bg-white/60 rounded px-2 py-1.5 col-span-2">
-                    <span className="text-yellow-700 font-bold">完整流程</span>
-                    <span className="text-yellow-600 ml-2">100 Credits/个视频</span>
+                  <div className="bg-white/80 backdrop-blur-sm rounded-xl px-3 py-2.5 shadow-sm hover:shadow-md transition-shadow">
+                    <div className="text-yellow-700 font-bold text-xs mb-1">完整流程</div>
+                    <div className="text-yellow-600 font-semibold">100 积分</div>
                   </div>
                 </div>
-                <p className="text-xs text-yellow-600/80 mt-2">
-                  • 10元 = 1000点 | • Credits 永久有效，无过期时间
+                <p className="text-xs text-yellow-700/80 mt-3 flex items-center gap-2">
+                  <span>• 10元 = 100积分</span>
+                  <span>• 积分永久有效</span>
+                  <span>• 多充多送</span>
                 </p>
               </div>
             </div>
@@ -158,7 +178,7 @@ export function RechargeModal({ isOpen, onClose, onRecharge }: RechargeModalProp
                   <div className="space-y-1.5">
                     <div className="flex items-center gap-2">
                       <Zap className="text-yellow-500" size={16} />
-                      <span className="text-base font-bold text-slate-900">{pkg.credits.toLocaleString()} Credits</span>
+                      <span className="text-base font-bold text-slate-900">{pkg.credits.toLocaleString()} 积分</span>
                     </div>
                   </div>
                 </button>
@@ -222,7 +242,7 @@ export function RechargeModal({ isOpen, onClose, onRecharge }: RechargeModalProp
                 <span className="text-2xl font-bold text-slate-900">¥{selectedPkg.price}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-slate-600">获得 Credits</span>
+                <span className="text-sm text-slate-600">获得积分</span>
                 <span className="text-xl font-bold text-yellow-600">
                   {selectedPkg.credits.toLocaleString()}
                 </span>

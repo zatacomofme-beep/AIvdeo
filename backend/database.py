@@ -214,6 +214,31 @@ class CreditHistory(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class GeneratedImage(Base):
+    """生成的九宫格图片表"""
+    __tablename__ = "generated_images"
+    
+    id = Column(String(36), primary_key=True)
+    user_id = Column(String(36), nullable=False, index=True)
+    
+    # 图片信息
+    original_url = Column(Text, nullable=False)  # 原始白底图 URL
+    grid_url = Column(Text, nullable=False)  # 生成的九宫格图片 URL
+    
+    # 生成参数
+    model_name = Column(String(100))  # 使用的模型名称
+    credits_cost = Column(Integer, default=50)  # 消耗的积分
+    
+    # 状态
+    status = Column(String(20), default='completed')  # processing, completed, failed
+    
+    # 标签和分类（方便后续管理）
+    tags = Column(JSON)  # ["标签1", "标签2"]
+    category = Column(String(100))  # 分类
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 # ======================
 # 数据库工具函数
 # ======================
@@ -241,6 +266,7 @@ def init_database():
         print("  - characters (角色表)")
         print("  - saved_prompts (提示词表)")
         print("  - credit_history (积分历史表)")
+        print("  - generated_images (九宫格图片表)")
         return True
     except Exception as e:
         print(f"[DATABASE] ✗ 创建数据库表失败: {e}")
