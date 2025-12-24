@@ -147,45 +147,36 @@ export function NineGridGenerator() {
   }
 
   return (
-    <div className="h-full flex flex-col relative overflow-hidden">
-      {/* Background Decoration */}
-      <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-gradient-to-br from-purple-300/20 to-pink-300/20 rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-gradient-to-br from-blue-300/20 to-cyan-300/20 rounded-full blur-[140px] pointer-events-none" />
-      
-      {/* Header with Modern Design */}
-      <div className="relative px-8 py-8 border-b border-white/30 bg-gradient-to-r from-purple-500/10 via-blue-500/10 to-cyan-500/10 backdrop-blur-md">
-        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20" />
-        <div className="relative">
-          <h1 className="text-4xl font-black bg-gradient-to-r from-purple-600 via-blue-600 to-cyan-600 bg-clip-text text-transparent mb-3">
-            🎨 九宫格生成器
-          </h1>
-          <p className="text-lg text-slate-700 font-medium">上传白底商品图，AI生成9个不同角度的2K高清九宫格展示图</p>
-          <div className="mt-4 flex items-center gap-6 text-sm">
-            <div className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-yellow-50 to-amber-50 rounded-full border border-yellow-200/50">
-              <Sparkles size={16} className="text-yellow-600" />
-              <span className="font-bold text-yellow-700">消耗 50 积分/张</span>
-            </div>
-            <div className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-full border border-blue-200/50">
-              <Clock size={16} className="text-blue-600" />
-              <span className="font-bold text-blue-700">生成时间约 30-60 秒</span>
-            </div>
+    <div className="h-full flex flex-col bg-white">
+      {/* Business Tech Header */}
+      <div className="px-8 py-6 border-b border-slate-200">
+        <h1 className="text-3xl font-semibold text-slate-900 mb-2">
+          九宫格生成器
+        </h1>
+        <p className="text-slate-600">上传白底商品图，AI生成9个不同角度的2K高清九宫格展示图</p>
+        <div className="mt-4 flex items-center gap-4 text-sm">
+          <div className="badge-tech-ai">
+            <Sparkles size={14} />
+            <span>消耗 50 积分/张</span>
+          </div>
+          <div className="badge-tech">
+            <Clock size={14} />
+            <span>生成时间约 30-60 秒</span>
           </div>
         </div>
       </div>
 
       {/* Content */}
-      <div className="relative flex-1 overflow-y-auto p-8">
-        <div className="max-w-7xl mx-auto">
-          {/* Upload Section with Glass Effect */}
-          <div className="relative bg-gradient-to-br from-white/80 to-white/60 backdrop-blur-xl rounded-3xl border-2 border-white/60 p-10 mb-10 shadow-2xl overflow-hidden">
-            <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10" />
-            <h2 className="relative text-2xl font-black text-slate-900 mb-6 flex items-center gap-2">
-              <span className="text-3xl">📷</span>
+      <div className="flex-1 overflow-y-auto p-8 bg-slate-50">
+        <div className="max-w-6xl mx-auto">
+          {/* Upload Section - Business Tech */}
+          <div className="tech-card p-8 mb-8">
+            <h2 className="text-xl font-semibold text-slate-900 mb-6">
               上传白底商品图
             </h2>
             
-            <div className="relative grid grid-cols-2 gap-10">
-              {/* Upload Area with Modern Design */}
+            <div className="grid grid-cols-2 gap-8">
+              {/* Upload Area - Business Tech */}
               <div>
                 <label className="block">
                   <input
@@ -195,10 +186,10 @@ export function NineGridGenerator() {
                     className="hidden"
                   />
                   <div className={cn(
-                    "border-3 border-dashed rounded-2xl p-10 cursor-pointer transition-all relative overflow-hidden group",
+                    "border-2 border-dashed rounded-lg p-8 cursor-pointer transition-all",
                     previewUrl 
-                      ? "border-cyan-400 bg-gradient-to-br from-cyan-50/80 to-blue-50/80 shadow-lg shadow-cyan-500/20" 
-                      : "border-slate-300 hover:border-purple-400 bg-gradient-to-br from-slate-50/80 to-white/80 hover:shadow-lg hover:shadow-purple-500/10"
+                      ? "border-tech bg-tech-light/20" 
+                      : "border-slate-300 hover:border-slate-400 bg-slate-50"
                   )}>
                     <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10" />
                     {previewUrl ? (

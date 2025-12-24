@@ -131,14 +131,8 @@ function AppContent() {
   };
 
   return (
-    <div className="h-screen w-screen bg-gradient-to-br from-slate-50 via-purple-50/30 to-blue-50/30 text-slate-900 flex overflow-hidden relative">
-      {/* Enhanced Background Elements with MindVideo Style */}
-      <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] rounded-full bg-gradient-to-br from-purple-300/30 to-pink-300/30 blur-[140px] animate-pulse pointer-events-none z-0" />
-      <div className="absolute bottom-[-20%] right-[-10%] w-[700px] h-[700px] rounded-full bg-gradient-to-br from-blue-300/30 to-cyan-300/30 blur-[150px] animate-pulse pointer-events-none z-0" style={{ animationDelay: '2s' }} />
-      <div className="absolute top-[40%] left-[50%] w-[500px] h-[500px] rounded-full bg-gradient-to-br from-yellow-200/20 to-amber-200/20 blur-[120px] animate-pulse pointer-events-none z-0" style={{ animationDelay: '1s' }} />
-
-      {/* Noise Texture Overlay */}
-      <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.015] pointer-events-none z-0 mix-blend-overlay"></div>
+    <div className="h-screen w-screen bg-[#F8FAFC] text-slate-900 flex overflow-hidden relative">
+      {/* Business Tech: 去除光球和渐变背景，使用纯色 */}
 
       {/* Left Sidebar */}
       <div className="relative z-10 flex h-full">

@@ -1,28 +1,18 @@
-
 import React, { useState } from 'react';
 import { 
-  Home, 
   Video, 
-  Image, 
-  Mic, 
-  Music, 
-  Palette, 
-  Heart, 
-  Download,
-  Plus,
-  Folder,
   Film,
   MessageSquare,
   Package,
-  ChevronDown,
-  ChevronRight,
-  User,
   Users,
   Zap,
   LogIn,
   Globe,
-  Shield,  // 新增：管理员图标
-  Grid3x3    // 新增：九宫格图标
+  Shield,
+  Grid3x3,
+  ChevronRight,
+  Command,
+  CreditCard
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useStore } from '../lib/store';
@@ -35,7 +25,7 @@ interface SidebarProps {
   onOpenRecharge?: () => void;
 }
 
-export function Sidebar({ 
+export function SidebarBusinessTech({ 
   activeTab = 'video', 
   onTabChange,
   onOpenLogin,
@@ -43,16 +33,13 @@ export function Sidebar({
   onOpenRecharge
 }: SidebarProps) {
   const { user, isLoggedIn, credits, myVideos, myPrompts, savedProducts, myCharacters } = useStore();
-  const [assetsExpanded, setAssetsExpanded] = useState(true);
-  const [workspaceExpanded, setWorkspaceExpanded] = useState(true);
   
   const navItems = [
     { id: 'video', icon: Video, label: '开始创作' },
     { id: 'nine-grid', icon: Grid3x3, label: '九宫格生成' },
     { id: 'square', icon: Globe, label: '内容广场' },
-    // 管理员才能看到
     ...(user?.role === 'admin' ? [
-      { id: 'admin', icon: Shield, label: '管理员控制台' }
+      { id: 'admin', icon: Shield, label: '管理员' }
     ] : [])
   ];
 
@@ -64,18 +51,18 @@ export function Sidebar({
   ];
 
   return (
-    <div className="w-64 flex flex-col bg-slate-900 text-slate-300 border-r border-slate-800 shrink-0 shadow-xl shadow-slate-900/50">
-      {/* Logo with Business Tech Style */}
+    <aside className="w-64 flex flex-col bg-slate-900 text-slate-300 border-r border-slate-800 shrink-0">
+      {/* Brand Header */}
       <div className="h-16 flex items-center px-6 border-b border-slate-800/50">
         <div className="flex items-center gap-2.5">
           <div className="size-8 rounded-md bg-tech flex items-center justify-center text-white shadow-tech-glow">
-            <span className="text-lg font-bold">S</span>
+            <Command className="size-5" />
           </div>
           <span className="text-lg font-semibold text-white tracking-tight">SEMOPIC</span>
         </div>
       </div>
 
-      {/* User Section - Business Tech Card */}
+      {/* User Section */}
       <div className="p-4 border-b border-slate-800/50">
         {isLoggedIn && user ? (
           <button
@@ -89,6 +76,7 @@ export function Sidebar({
               <div className="text-sm font-medium truncate text-white">{user.username}</div>
               <div className="text-xs text-slate-400 truncate">{user.email}</div>
             </div>
+            <ChevronRight className="size-4 text-slate-500 group-hover:text-slate-300" />
           </button>
         ) : (
           <button
@@ -101,17 +89,50 @@ export function Sidebar({
         )}
       </div>
 
-      {/* Main Navigation - Business Tech Style */}
+      {/* Main Navigation */}
       <nav className="flex-1 py-6 px-3 space-y-6 overflow-y-auto custom-scrollbar">
-        {/* 创作中心 */}
+        {/* Workspace Section */}
         <div>
-          <div className="px-3 mb-2">
+          <div className="px-3 mb-2 flex items-center justify-between">
             <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Workspace</span>
           </div>
           
-          {workspaceExpanded && (
+          <div className="space-y-1">
+            {navItems.map((item) => {
+              const isActive = activeTab === item.id;
+              const Icon = item.icon;
+
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => onTabChange?.(item.id)}
+                  className={cn(
+                    "w-full flex items-center justify-between px-3 py-2.5 rounded-md text-[13px] font-medium transition-all duration-200 group",
+                    isActive
+                      ? "bg-tech/10 text-tech relative before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 before:bg-tech before:rounded-r-sm"
+                      : "text-slate-400 hover:text-slate-100 hover:bg-slate-800"
+                  )}
+                >
+                  <div className="flex items-center gap-3">
+                    <Icon className={cn("size-[18px] transition-colors", isActive ? "text-tech" : "text-slate-500 group-hover:text-slate-300")} />
+                    <span>{item.label}</span>
+                  </div>
+                  {isActive && <ChevronRight className="size-4 opacity-50" />}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Assets Section */}
+        {isLoggedIn && (
+          <div>
+            <div className="px-3 mb-2 flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Assets</span>
+            </div>
+            
             <div className="space-y-1">
-              {navItems.map((item) => {
+              {assetItems.map((item) => {
                 const isActive = activeTab === item.id;
                 const Icon = item.icon;
                 
@@ -120,67 +141,33 @@ export function Sidebar({
                     key={item.id}
                     onClick={() => onTabChange?.(item.id)}
                     className={cn(
-                      "w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-[13px] font-medium transition-all duration-200 group",
+                      "w-full flex items-center justify-between px-3 py-2.5 rounded-md text-[13px] font-medium transition-all duration-200 group",
                       isActive
                         ? "bg-tech/10 text-tech relative before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 before:bg-tech before:rounded-r-sm"
                         : "text-slate-400 hover:text-slate-100 hover:bg-slate-800"
                     )}
                   >
-                    <Icon className={cn("size-[18px] transition-colors", isActive ? "text-tech" : "text-slate-500 group-hover:text-slate-300")} />
-                    <span>{item.label}</span>
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <Icon className={cn("size-[17px] shrink-0 transition-colors", isActive ? "text-tech" : "text-slate-500 group-hover:text-slate-300")} />
+                      <span className="truncate">{item.label}</span>
+                    </div>
+                    {item.count > 0 && (
+                      <span className={cn(
+                        "px-2 py-0.5 rounded text-[11px] font-bold transition-all shrink-0",
+                        isActive ? "bg-tech/20 text-tech" : "bg-slate-800 text-slate-400 group-hover:bg-slate-700 group-hover:text-slate-300"
+                      )}>
+                        {item.count}
+                      </span>
+                    )}
                   </button>
                 );
               })}
             </div>
-          )}
-        </div>
-
-        {/* 我的资产 */}
-        {isLoggedIn && (
-          <div>
-            <div className="px-3 mb-2">
-              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Assets</span>
-            </div>
-            
-            {assetsExpanded && (
-              <div className="space-y-1">
-                {assetItems.map((item) => {
-                  const Icon = item.icon;
-                  const isActive = activeTab === item.id;
-                  
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => onTabChange?.(item.id)}
-                      className={cn(
-                        "w-full flex items-center justify-between px-3 py-2.5 rounded-md text-[13px] font-medium transition-all duration-200 group",
-                        isActive 
-                          ? "bg-tech/10 text-tech relative before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 before:bg-tech before:rounded-r-sm" 
-                          : "text-slate-400 hover:text-slate-100 hover:bg-slate-800"
-                      )}
-                    >
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <Icon className={cn("size-[17px] shrink-0 transition-colors", isActive ? "text-tech" : "text-slate-500 group-hover:text-slate-300")} />
-                        <span className="truncate">{item.label}</span>
-                      </div>
-                      {item.count > 0 && (
-                        <span className={cn(
-                          "px-2 py-0.5 rounded text-[11px] font-bold transition-all shrink-0",
-                          isActive ? "bg-tech/20 text-tech" : "bg-slate-800 text-slate-400 group-hover:bg-slate-700 group-hover:text-slate-300"
-                        )}>
-                          {item.count}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
           </div>
         )}
       </nav>
 
-      {/* Credits Display - Business Tech Card */}
+      {/* Credits Display */}
       <div className="p-4 border-t border-slate-800/50 bg-slate-900/50">
         <div className="bg-slate-800/50 border border-slate-700/50 rounded-md p-4 relative overflow-hidden group hover:border-tech/50 transition-all">
           {/* Subtle glow effect */}
@@ -198,15 +185,15 @@ export function Sidebar({
             {isLoggedIn && (
               <button
                 onClick={onOpenRecharge}
-                className="w-full bg-tech text-white hover:bg-tech-hover px-4 py-2 rounded-md text-xs font-medium transition-all shadow-tech-sm hover:shadow-tech-glow flex items-center justify-center gap-2"
+                className="w-full btn-tech-ai text-xs py-2 flex items-center justify-center gap-2"
               >
-                <Zap size={14} />
+                <CreditCard size={14} />
                 <span>充值积分</span>
               </button>
             )}
           </div>
         </div>
       </div>
-    </div>
+    </aside>
   );
 }
