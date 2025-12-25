@@ -49,13 +49,9 @@ export function LoginModal({ isOpen, onClose, onLogin, onRegister }: LoginModalP
 
   return (
     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 animate-in fade-in duration-300">
-      <div className="w-[450px] glass-card shadow-2xl rounded-2xl border border-white/60 bg-white/90 overflow-hidden relative">
-        {/* Decorative background blobs */}
-        <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-100/30 rounded-full blur-[40px] pointer-events-none" />
-        <div className="absolute bottom-0 left-0 w-32 h-32 bg-purple-100/30 rounded-full blur-[40px] pointer-events-none" />
-
+      <div className="w-[450px] tech-card shadow-tech-lg rounded-lg border border-slate-200 bg-white overflow-hidden relative">
         {/* Header */}
-        <div className="h-20 flex items-center justify-between px-8 border-b border-slate-100 bg-white/60 backdrop-blur-md">
+        <div className="h-20 flex items-center justify-between px-8 border-b border-slate-100 bg-slate-50/50">
           <h2 className="font-bold text-xl text-slate-800 tracking-wide">
             {mode === 'login' ? '欢迎回来' : '创建账号'}
           </h2>
@@ -76,14 +72,14 @@ export function LoginModal({ isOpen, onClose, onLogin, onRegister }: LoginModalP
                 用户名 <span className="text-red-500">*</span>
               </label>
               <div className="relative group">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-cyan-500 transition-colors" size={18} />
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-tech transition-colors" size={18} />
                 <input
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   placeholder="请输入用户名"
                   required
-                  className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100 transition-all hover:border-slate-300"
+                  className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-md text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-tech focus:ring-2 focus:ring-tech/20 transition-all hover:border-slate-300"
                 />
               </div>
             </div>
@@ -95,14 +91,14 @@ export function LoginModal({ isOpen, onClose, onLogin, onRegister }: LoginModalP
               邮箱 <span className="text-red-500">*</span>
             </label>
             <div className="relative group">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-cyan-500 transition-colors" size={18} />
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-tech transition-colors" size={18} />
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="请输入邮箱"
                 required
-                className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100 transition-all hover:border-slate-300"
+                className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-md text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-tech focus:ring-2 focus:ring-tech/20 transition-all hover:border-slate-300"
               />
             </div>
           </div>
@@ -113,7 +109,7 @@ export function LoginModal({ isOpen, onClose, onLogin, onRegister }: LoginModalP
               密码 <span className="text-red-500">*</span>
             </label>
             <div className="relative group">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-cyan-500 transition-colors" size={18} />
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-tech transition-colors" size={18} />
               <input
                 type={showPassword ? 'text' : 'password'}
                 value={password}
@@ -121,7 +117,7 @@ export function LoginModal({ isOpen, onClose, onLogin, onRegister }: LoginModalP
                 placeholder="请输入密码"
                 required
                 minLength={6}
-                className="w-full pl-10 pr-12 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100 transition-all hover:border-slate-300"
+                className="w-full pl-10 pr-12 py-3 bg-white border border-slate-200 rounded-md text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-tech focus:ring-2 focus:ring-tech/20 transition-all hover:border-slate-300"
               />
               <button
                 type="button"
@@ -142,10 +138,10 @@ export function LoginModal({ isOpen, onClose, onLogin, onRegister }: LoginModalP
               type="submit"
               disabled={isLoading}
               className={cn(
-                "w-full py-3.5 rounded-xl font-bold transition-all shadow-lg transform hover:-translate-y-0.5",
+                "w-full py-3.5 rounded-md font-semibold transition-all shadow-sm",
                 isLoading
-                  ? "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
-                  : "bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 text-white shadow-yellow-500/20 hover:shadow-yellow-500/40"
+                  ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                  : "btn-tech-ai"
               )}
             >
               {isLoading ? '处理中...' : mode === 'login' ? '立即登录' : '立即注册'}
@@ -162,7 +158,7 @@ export function LoginModal({ isOpen, onClose, onLogin, onRegister }: LoginModalP
                 setPassword('');
                 setUsername('');
               }}
-              className="text-sm text-slate-500 hover:text-cyan-600 transition-colors font-medium"
+              className="text-sm text-slate-500 hover:text-tech transition-colors font-medium"
             >
               {mode === 'login' ? '还没有账号？立即注册' : '已有账号？立即登录'}
             </button>
@@ -172,10 +168,10 @@ export function LoginModal({ isOpen, onClose, onLogin, onRegister }: LoginModalP
         {/* Footer */}
         {mode === 'register' && (
           <div className="px-8 pb-8 relative z-10 animate-in fade-in duration-500">
-            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex items-center justify-center gap-2">
+            <div className="bg-sky-50 border border-sky-200 rounded-md p-4 flex items-center justify-center gap-2">
               <span className="text-xl">🎁</span>
-              <p className="text-sm text-yellow-700">
-                新用户注册即送 <span className="font-bold text-yellow-600 text-base">100 Credits</span>
+              <p className="text-sm text-sky-700">
+                新用户注册即送 <span className="font-bold text-tech text-base">100 Credits</span>
               </p>
             </div>
           </div>

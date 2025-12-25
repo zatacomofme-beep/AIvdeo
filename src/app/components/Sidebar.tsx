@@ -48,7 +48,7 @@ export function Sidebar({
   
   const navItems = [
     { id: 'video', icon: Video, label: '开始创作' },
-    { id: 'nine-grid', icon: Grid3x3, label: '九宫格生成' },
+    { id: 'nine-grid', icon: Grid3x3, label: '九宫格图' },
     { id: 'square', icon: Globe, label: '内容广场' },
     // 管理员才能看到
     ...(user?.role === 'admin' ? [
@@ -69,7 +69,7 @@ export function Sidebar({
       <div className="h-16 flex items-center px-6 border-b border-slate-800/50">
         <div className="flex items-center gap-2.5">
           <div className="size-8 rounded-md bg-tech flex items-center justify-center text-white shadow-tech-glow">
-            <span className="text-lg font-bold">S</span>
+            <span className="text-lg font-bold"></span>
           </div>
           <span className="text-lg font-semibold text-white tracking-tight">SEMOPIC</span>
         </div>

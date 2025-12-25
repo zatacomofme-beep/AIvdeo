@@ -21,6 +21,7 @@ import { ContactUs } from './components/ContactUs';
 import { useStore } from './lib/store';
 import { api } from '../lib/api';
 import { ToastProvider, useToast } from './components/ui/toast';
+import { HeroUIProvider } from '@heroui/react';
 
 function AppContent() {
   const [activeTab, setActiveTab] = React.useState('video');
@@ -214,8 +215,10 @@ function AppContent() {
 
 export default function App() {
   return (
-    <ToastProvider>
-      <AppContent />
-    </ToastProvider>
+    <HeroUIProvider>
+      <ToastProvider>
+        <AppContent />
+      </ToastProvider>
+    </HeroUIProvider>
   );
 }

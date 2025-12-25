@@ -120,10 +120,26 @@ export function UserCenter({ isOpen, onClose, onLogout }: UserCenterProps) {
     { id: 'history', label: '使用记录', icon: History },
   ];
 
-  const handleSaveProfile = () => {
-    // TODO: 调用API更新用户信息
-    console.log('保存用户信息:', editedUsername);
-    setIsEditing(false);
+  const handleSaveProfile = async () => {
+    if (!user) return;
+    
+    try {
+      // 调用API更新用户信息
+      await api.updateUser(user.id, {
+        username: editedUsername
+      });
+      
+      // 更新本地状态
+      useStore.setState({
+        user: { ...user, username: editedUsername }
+      });
+      
+      setIsEditing(false);
+      alert('✅ 用户名保存成功！');
+    } catch (error) {
+      console.error('保存用户信息失败:', error);
+      alert('❌ 保存失败，请重试');
+    }
   };
 
   if (!isOpen || !user) return null;
@@ -143,9 +159,9 @@ export function UserCenter({ isOpen, onClose, onLogout }: UserCenterProps) {
         </div>
 
         {/* User Info Banner */}
-        <div className="bg-gradient-to-r from-slate-50 to-white p-6 border-b border-slate-100">
+        <div className="bg-slate-50 p-6 border-b border-slate-100">
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 bg-gradient-to-br from-yellow-400 to-amber-500 rounded-full flex items-center justify-center text-white text-2xl font-bold shadow-md shadow-yellow-500/20">
+            <div className="w-16 h-16 bg-tech rounded-full flex items-center justify-center text-white text-2xl font-bold shadow-tech-sm">
               {user.username.charAt(0).toUpperCase()}
             </div>
             <div className="flex-1">
@@ -154,7 +170,7 @@ export function UserCenter({ isOpen, onClose, onLogout }: UserCenterProps) {
             </div>
             <div className="text-right">
               <div className="text-sm text-slate-500 mb-1">可用积分</div>
-              <div className="text-3xl font-bold text-yellow-500">{credits}</div>
+              <div className="text-3xl font-bold text-tech">{credits}</div>
             </div>
           </div>
         </div>
@@ -172,7 +188,7 @@ export function UserCenter({ isOpen, onClose, onLogout }: UserCenterProps) {
                   className={cn(
                     "flex items-center gap-2 px-4 py-3 border-b-2 transition-all",
                     isActive
-                      ? "border-yellow-400 text-slate-900"
+                      ? "border-tech text-slate-900"
                       : "border-transparent text-slate-400 hover:text-slate-600"
                   )}
                 >
@@ -213,7 +229,7 @@ export function UserCenter({ isOpen, onClose, onLogout }: UserCenterProps) {
                       </button>
                       <button
                         onClick={handleSaveProfile}
-                        className="px-4 py-2 bg-yellow-400 hover:bg-yellow-500 text-white rounded-lg flex items-center gap-2 text-sm font-bold shadow-md shadow-yellow-500/20"
+                        className="px-4 py-2 btn-tech-ai rounded-lg flex items-center gap-2 text-sm font-semibold"
                       >
                         <Check size={16} />
                         保存
@@ -230,7 +246,7 @@ export function UserCenter({ isOpen, onClose, onLogout }: UserCenterProps) {
                         type="text"
                         value={editedUsername}
                         onChange={(e) => setEditedUsername(e.target.value)}
-                        className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100 transition-all"
+                        className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-md text-slate-900 focus:outline-none focus:border-tech focus:ring-2 focus:ring-tech/20 transition-all"
                       />
                     ) : (
                       <div className="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-700">
@@ -262,7 +278,7 @@ export function UserCenter({ isOpen, onClose, onLogout }: UserCenterProps) {
                   {statsLoading ? (
                     <div className="text-2xl font-bold text-slate-300">--</div>
                   ) : (
-                    <div className="text-2xl font-bold text-yellow-500">{stats.videoCount}</div>
+                    <div className="text-2xl font-bold text-tech">{stats.videoCount}</div>
                   )}
                   <div className="text-sm text-slate-500 mt-1">生成视频数</div>
                 </div>
@@ -270,7 +286,7 @@ export function UserCenter({ isOpen, onClose, onLogout }: UserCenterProps) {
                   {statsLoading ? (
                     <div className="text-2xl font-bold text-slate-300">--</div>
                   ) : (
-                    <div className="text-2xl font-bold text-blue-500">{stats.productCount}</div>
+                    <div className="text-2xl font-bold text-tech">{stats.productCount}</div>
                   )}
                   <div className="text-sm text-slate-500 mt-1">保存商品数</div>
                 </div>
@@ -278,7 +294,7 @@ export function UserCenter({ isOpen, onClose, onLogout }: UserCenterProps) {
                   {statsLoading ? (
                     <div className="text-2xl font-bold text-slate-300">--</div>
                   ) : (
-                    <div className="text-2xl font-bold text-green-500">
+                    <div className="text-2xl font-bold text-tech">
                       {stats.totalConsumed.toLocaleString()}
                     </div>
                   )}
@@ -295,7 +311,7 @@ export function UserCenter({ isOpen, onClose, onLogout }: UserCenterProps) {
                 <h3 className="text-sm font-semibold text-slate-700 mb-3">充值记录</h3>
                 {billingLoading ? (
                   <div className="flex items-center justify-center py-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-2 border-yellow-500 border-t-transparent" />
+                    <div className="animate-spin rounded-full h-8 w-8 border-2 border-tech border-t-transparent" />
                   </div>
                 ) : billingHistory.length > 0 ? (
                   <div className="space-y-2">
@@ -344,7 +360,7 @@ export function UserCenter({ isOpen, onClose, onLogout }: UserCenterProps) {
                 <h3 className="text-sm font-semibold text-slate-700 mb-3">使用记录</h3>
                 {historyLoading ? (
                   <div className="flex items-center justify-center py-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-2 border-cyan-500 border-t-transparent" />
+                    <div className="animate-spin rounded-full h-8 w-8 border-2 border-tech border-t-transparent" />
                   </div>
                 ) : usageHistory.length > 0 ? (
                   <div className="space-y-2">

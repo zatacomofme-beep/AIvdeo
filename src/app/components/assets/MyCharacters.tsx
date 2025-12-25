@@ -7,6 +7,8 @@ const API_BASE_URL = 'https://semopic.com';
 export function MyCharacters() {
   const { myCharacters, addCharacter, deleteCharacter, user, isLoggedIn, loadUserData } = useStore();  // 添加 loadUserData
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);  // 新增：编辑模态框
+  const [editingCharacter, setEditingCharacter] = useState<any>(null);  // 新增：正在编辑的角色
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [formData, setFormData] = useState({
     country: '', // 国家
@@ -92,6 +94,106 @@ export function MyCharacters() {
     } catch (error) {
       console.error('AI生成角色失败:', error);
       alert('❌ AI生成失败，请稍后重试');
+    } finally {
+      setIsGeneratingAI(false);
+    }
+  };
+
+  // 新增：打开编辑模态框
+  const handleEditCharacter = (character: any) => {
+    setEditingCharacter(character);
+    setFormData({
+      country: '',  // 编辑时不需要国家和人种
+      ethnicity: '',
+      name: character.name,
+      description: character.description,
+      age: character.age?.toString() || '',
+      gender: character.gender || '',
+      style: character.style || '',
+      tags: character.tags?.join(', ') || ''
+    });
+    setShowEditModal(true);
+  };
+
+  // 新增：更新角色
+  const handleUpdateCharacter = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.name || !formData.description) {
+      alert('请填写角色名称和描述');
+      return;
+    }
+
+    const currentUser = useStore.getState().user;
+    if (!currentUser) {
+      alert('请先登录！');
+      return;
+    }
+
+    setIsGeneratingAI(true);
+    
+    try {
+      // 调用后端API更新角色
+      const response = await fetch(`${API_BASE_URL}/api/update-character`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          character_id: editingCharacter.characterId || editingCharacter.id,
+          user_id: currentUser.id,
+          name: formData.name,
+          description: formData.description,
+          age: formData.age ? parseInt(formData.age) : undefined,
+          gender: formData.gender || undefined,
+          style: formData.style || undefined,
+          tags: formData.tags ? formData.tags.split(',').map(t => t.trim()).filter(Boolean) : []
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: '更新失败' }));
+        throw new Error(errorData.detail || '更新角色失败');
+      }
+
+      // 更新本地store
+      const updatedCharacters = myCharacters.map(char => 
+        char.id === editingCharacter.id ? {
+          ...char,
+          name: formData.name,
+          description: formData.description,
+          age: formData.age ? parseInt(formData.age) : undefined,
+          gender: formData.gender || undefined,
+          style: formData.style || undefined,
+          tags: formData.tags ? formData.tags.split(',').map(t => t.trim()).filter(Boolean) : []
+        } : char
+      );
+      
+      // 手动更新store（需要在store中添加updateCharacter方法，或直接操作）
+      useStore.setState({ myCharacters: updatedCharacters });
+
+      setShowEditModal(false);
+      setEditingCharacter(null);
+      setFormData({
+        country: '',
+        ethnicity: '',
+        name: '',
+        description: '',
+        age: '',
+        gender: '',
+        style: '',
+        tags: ''
+      });
+      
+      alert('✅ 角色更新成功！');
+      
+      // 重新加载数据
+      if (currentUser?.id) {
+        loadUserData(currentUser.id);
+      }
+      
+    } catch (error) {
+      console.error('更新角色失败:', error);
+      alert(`❌ 更新角色失败\n\n${error instanceof Error ? error.message : '请稍后重试'}`);
     } finally {
       setIsGeneratingAI(false);
     }
@@ -184,22 +286,22 @@ export function MyCharacters() {
   };
 
   return (
-    <div className="flex-1 flex flex-col h-screen overflow-hidden bg-slate-50/30">
+    <div className="flex-1 flex flex-col h-screen overflow-hidden bg-white">
       <div className="p-8 pb-4">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-2xl font-bold text-slate-900 flex items-center gap-3">
-              <Users className="text-purple-600" />
+            <h2 className="text-3xl font-semibold text-slate-900 flex items-center gap-3">
+              <Users className="text-tech" size={32} />
               我的角色
-              <span className="text-sm font-normal text-slate-500 bg-white px-2 py-1 rounded-md border border-slate-200">
+              <span className="badge-tech ml-2">
                 {myCharacters.length}
               </span>
             </h2>
-            <p className="text-slate-500 mt-2 text-sm">管理您创建的所有虚拟角色</p>
+            <p className="text-slate-600 mt-2 text-sm">管理您创建的所有虚拟角色</p>
           </div>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white rounded-lg transition-all shadow-md shadow-purple-500/20 hover:shadow-purple-500/30"
+            className="btn-tech-ai flex items-center gap-2 px-4 py-2.5"
           >
             <Plus size={18} />
             创建角色
@@ -207,10 +309,10 @@ export function MyCharacters() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-8 pt-0 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto p-8 pt-0 custom-scrollbar bg-slate-50">
         {myCharacters.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-slate-400">
-            <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mb-4 border border-slate-200 shadow-sm">
+            <div className="w-20 h-20 bg-slate-100 rounded-lg flex items-center justify-center mb-4 border border-slate-200">
               <Users size={40} className="text-slate-300" />
             </div>
             <p className="text-lg text-slate-600">暂无角色</p>
@@ -221,25 +323,34 @@ export function MyCharacters() {
             {myCharacters.map((character) => (
               <div 
                 key={character.id} 
-                className="group relative bg-white border border-slate-200 rounded-xl overflow-hidden hover:border-purple-400/50 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:shadow-purple-500/10"
+                className="tech-card group relative overflow-hidden hover:shadow-tech-md transition-all"
               >
                 {/* 紧凑的头部区域 */}
-                <div className="relative bg-gradient-to-br from-purple-400 to-pink-400 p-4">
+                <div className="relative bg-slate-800 p-4">
                   <div className="flex items-center justify-between mb-2">
                     {/* 首字母头像 */}
-                    <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
+                    <div className="w-12 h-12 rounded-md bg-white/20 backdrop-blur-sm flex items-center justify-center">
                       <span className="text-2xl font-bold text-white">
                         {character.name.charAt(0).toUpperCase()}
                       </span>
                     </div>
-                    {/* 删除按钮 */}
-                    <button 
-                      onClick={() => deleteCharacter(character.id)}
-                      className="opacity-0 group-hover:opacity-100 p-1.5 bg-white/90 backdrop-blur-md text-red-500 hover:text-red-600 rounded-lg hover:bg-white transition-all shadow-sm"
-                      title="删除角色"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                    {/* 编辑和删除按钮 */}
+                    <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-all">
+                      <button 
+                        onClick={() => handleEditCharacter(character)}
+                        className="p-1.5 bg-white/90 backdrop-blur-md text-tech hover:text-tech-hover rounded-lg hover:bg-white transition-all shadow-sm"
+                        title="编辑角色"
+                      >
+                        <Edit size={14} />
+                      </button>
+                      <button 
+                        onClick={() => deleteCharacter(character.id)}
+                        className="p-1.5 bg-white/90 backdrop-blur-md text-red-500 hover:text-red-600 rounded-lg hover:bg-white transition-all shadow-sm"
+                        title="删除角色"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </div>
                   
                   {/* 角色名称 */}
@@ -285,7 +396,7 @@ export function MyCharacters() {
 
                   {/* 风格 */}
                   {character.style && (
-                    <div className="text-xs text-purple-600 mb-2 px-2 py-0.5 bg-purple-50 rounded inline-block">
+                    <div className="text-xs text-tech mb-2 px-2 py-0.5 bg-tech-light/20 rounded inline-block">
                       {character.style}
                     </div>
                   )}
@@ -305,11 +416,11 @@ export function MyCharacters() {
       {/* Create Character Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-in fade-in duration-300">
-          <div className="w-[700px] max-h-[90vh] bg-white flex flex-col rounded-2xl overflow-hidden shadow-2xl">
+          <div className="w-[700px] max-h-[90vh] bg-white flex flex-col rounded-lg overflow-hidden shadow-tech-lg">
             {/* Header */}
             <div className="h-20 flex items-center justify-between px-8 border-b border-slate-200 shrink-0 bg-white">
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center shadow-md shadow-purple-500/20 text-white">
+                <div className="w-12 h-12 bg-tech rounded-md flex items-center justify-center shadow-tech-sm text-white">
                   <Plus size={24} />
                 </div>
                 <div>
@@ -321,7 +432,7 @@ export function MyCharacters() {
                 <button
                   onClick={handleAIGenerate}
                   disabled={isGeneratingAI}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white rounded-lg text-sm font-medium transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="btn-tech-ai flex items-center gap-1.5 px-4 py-2 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                   title="使用AI生成角色信息"
                 >
                   {isGeneratingAI ? (
@@ -338,7 +449,7 @@ export function MyCharacters() {
                 </button>
                 <button
                   onClick={() => setShowCreateModal(false)}
-                  className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-all"
+                  className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-md transition-all"
                 >
                   <X size={24} />
                 </button>
@@ -349,8 +460,8 @@ export function MyCharacters() {
             <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
               <form onSubmit={handleSubmit} className="space-y-6">
               {/* 国家、人种、年龄、性别 - 先填写这4个参数 */}
-              <div className="bg-gradient-to-r from-purple-50 to-blue-50 p-4 rounded-xl border border-purple-200">
-                <h4 className="text-sm font-semibold text-purple-900 mb-3 flex items-center gap-2">
+              <div className="bg-tech-light/20 border-tech/30 p-4 rounded-md border">
+                <h4 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
                   <Wand2 size={16} />
                   请先填写以下4个参数，然后点击"AI生成"
                 </h4>
@@ -362,7 +473,7 @@ export function MyCharacters() {
                     <select
                       value={formData.country}
                       onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-tech focus:border-transparent transition-all"
                       required
                     >
                       <option value="">请选择国家</option>
@@ -401,7 +512,7 @@ export function MyCharacters() {
                     <select
                       value={formData.ethnicity}
                       onChange={(e) => setFormData({ ...formData, ethnicity: e.target.value })}
-                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-tech focus:border-transparent transition-all"
                       required
                     >
                       <option value="">请选择人种</option>
@@ -447,7 +558,7 @@ export function MyCharacters() {
                       placeholder="例如：28"
                       min="18"
                       max="80"
-                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-tech focus:border-transparent transition-all"
                       required
                     />
                   </div>
@@ -459,7 +570,7 @@ export function MyCharacters() {
                     <select
                       value={formData.gender}
                       onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
-                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-tech focus:border-transparent transition-all"
                       required
                     >
                       <option value="">请选择性别</option>
@@ -493,7 +604,7 @@ export function MyCharacters() {
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   placeholder="描述角色的背景、性格、特征等..."
                   rows={4}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all resize-none"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-tech focus:border-transparent transition-all resize-none"
                   required
                 />
               </div>
@@ -506,7 +617,7 @@ export function MyCharacters() {
                   <select
                     value={formData.gender}
                     onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-tech focus:border-transparent transition-all"
                   >
                     <option value="">请选择</option>
                     <option value="男">男</option>
@@ -526,7 +637,7 @@ export function MyCharacters() {
                     placeholder="例如：25"
                     min="0"
                     max="200"
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-tech focus:border-transparent transition-all"
                   />
                 </div>
               </div>
@@ -568,11 +679,152 @@ export function MyCharacters() {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white rounded-lg transition-all font-medium shadow-md shadow-purple-500/20 hover:shadow-purple-500/30"
+                  className="flex-1 btn-tech-ai px-6 py-3 font-medium"
                 >
                   创建角色
                 </button>
               </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Character Modal - 新增编辑模态框 */}
+      {showEditModal && editingCharacter && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-in fade-in duration-300">
+          <div className="w-[700px] max-h-[90vh] bg-white flex flex-col rounded-lg overflow-hidden shadow-tech-lg">
+            {/* Header */}
+            <div className="h-20 flex items-center justify-between px-8 border-b border-slate-200 shrink-0 bg-white">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-tech rounded-md flex items-center justify-center shadow-tech-sm text-white">
+                  <Edit size={24} />
+                </div>
+                <div>
+                  <h2 className="font-bold text-xl text-slate-800">编辑角色</h2>
+                  <p className="text-xs text-slate-500 mt-1">修改角色信息</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowEditModal(false);
+                  setEditingCharacter(null);
+                }}
+                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-md transition-all"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+              <form onSubmit={handleUpdateCharacter} className="space-y-6">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    角色名称 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="例如：李小明"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    角色描述 <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    placeholder="描述角色的背景、性格、特征等..."
+                    rows={4}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-tech focus:border-transparent transition-all resize-none"
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      性别
+                    </label>
+                    <select
+                      value={formData.gender}
+                      onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-tech focus:border-transparent transition-all"
+                    >
+                      <option value="">请选择</option>
+                      <option value="男">男</option>
+                      <option value="女">女</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      年龄
+                    </label>
+                    <input
+                      type="number"
+                      value={formData.age}
+                      onChange={(e) => setFormData({ ...formData, age: e.target.value })}
+                      placeholder="例如：25"
+                      min="18"
+                      max="80"
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-tech focus:border-transparent transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    风格/类型
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.style}
+                    onChange={(e) => setFormData({ ...formData, style: e.target.value })}
+                    placeholder="例如：写实、卡通、赛博朋克"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    标签（用逗号分隔）
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.tags}
+                    onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
+                    placeholder="例如：年轻, 活力, 科技"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">使用中文或英文逗号分隔多个标签</p>
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowEditModal(false);
+                      setEditingCharacter(null);
+                    }}
+                    className="flex-1 px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors font-medium"
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isGeneratingAI}
+                    className="flex-1 btn-tech-ai px-6 py-3 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isGeneratingAI ? '更新中...' : '保存修改'}
+                  </button>
+                </div>
               </form>
             </div>
           </div>

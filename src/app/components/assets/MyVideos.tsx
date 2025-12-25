@@ -3,6 +3,7 @@ import { useStore } from "../../lib/store";
 import { cn } from "../../lib/utils";
 import { api } from '../../../lib/api';
 import { useEffect, useState } from 'react';
+import { Card, CardBody, CardFooter, Progress, Button, Chip, Tooltip } from '@heroui/react';
 
 export function MyVideos() {
   const { myVideos, deleteVideo, updateVideoStatus } = useStore();
@@ -202,33 +203,35 @@ export function MyVideos() {
   };
 
   return (
-    <div className="flex-1 flex flex-col h-screen overflow-hidden bg-slate-50/30">
-      <div className="p-8 pb-4">
-        <h2 className="text-2xl font-bold text-slate-900 flex items-center gap-3">
-          <Film className="text-cyan-600" />
+    <div className="flex-1 flex flex-col h-screen overflow-hidden bg-white">
+      <div className="p-8 pb-4 border-b border-slate-200">
+        <h2 className="text-3xl font-semibold text-slate-900 flex items-center gap-3">
+          <Film className="text-tech" size={32} />
           我的视频
-          <span className="text-sm font-normal text-slate-500 bg-white px-2 py-1 rounded-md border border-slate-200">
+          <span className="badge-tech ml-2">
             {myVideos.length}
           </span>
         </h2>
-        <p className="text-slate-500 mt-2 text-sm">管理您生成的所有 AI 视频作品</p>
+        <p className="text-slate-600 mt-2 text-sm">管理您生成的所有 AI 视频作品</p>
         
         {/* 3天有效期提醒 */}
-        <div className="mt-4 flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-lg p-4">
-          <AlertTriangle className="text-amber-600 flex-shrink-0 mt-0.5" size={20} />
-          <div className="flex-1">
-            <h3 className="text-sm font-semibold text-amber-900 mb-1">重要提醒</h3>
-            <p className="text-sm text-amber-700">
-              受限于当前的测试环境，视频的保存时间只有 <span className="font-bold">3天</span>，生成成功的视频请在3天内下载保存到本地。
-            </p>
-          </div>
-        </div>
+        <Card className="mt-4 bg-warning-50 border-warning-200">
+          <CardBody className="flex flex-row gap-3 items-start">
+            <AlertTriangle className="text-warning-600 flex-shrink-0 mt-0.5" size={20} />
+            <div className="flex-1">
+              <h3 className="text-sm font-semibold text-warning-900 mb-1">重要提醒</h3>
+              <p className="text-sm text-warning-700">
+                受限于当前的测试环境，视频的保存时间只有 <span className="font-bold">3天</span>，生成成功的视频请在3天内下载保存到本地。
+              </p>
+            </div>
+          </CardBody>
+        </Card>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-8 pt-0 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto p-8 pt-0 custom-scrollbar bg-slate-50">
         {myVideos.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-slate-400">
-            <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mb-4 border border-slate-200 shadow-sm">
+            <div className="w-20 h-20 bg-slate-100 rounded-lg flex items-center justify-center mb-4 border border-slate-200">
               <Film size={40} className="text-slate-300" />
             </div>
             <p className="text-lg text-slate-600">暂无视频</p>
@@ -237,118 +240,145 @@ export function MyVideos() {
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
             {myVideos.map((video) => (
-              <div 
+              <Card 
                 key={video.id} 
-                className="group relative bg-white border border-slate-200 rounded-xl overflow-hidden hover:border-cyan-400/50 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-cyan-500/10"
+                className="group overflow-hidden hover:scale-[1.02] transition-transform"
+                isPressable={video.status === 'completed'}
+                onPress={() => video.status === 'completed' && window.open(video.url, '_blank')}
               >
-                {/* Thumbnail Container */}
-                <div className="aspect-[9/16] relative bg-slate-100">
-                  {/* 状态徽章 */}
-                  {getStatusBadge(video)}
-                  
-                  <img 
-                    src={video.thumbnail || video.url} 
-                    alt={video.productName}
-                    className={cn(
-                      "w-full h-full object-cover transition-transform duration-500",
-                      video.status === 'completed' && "group-hover:scale-105",
-                      video.status === 'processing' && "opacity-50"
+                <CardBody className="p-0">
+                  {/* Thumbnail Container */}
+                  <div className="aspect-[9/16] relative bg-slate-100">
+                    {/* 状态徽章 - 使用 Chip */}
+                    {video.status === 'processing' && (
+                      <Chip 
+                        className="absolute top-2 left-2 z-10" 
+                        color="primary" 
+                        variant="shadow"
+                        startContent={<Loader2 size={14} className="animate-spin" />}
+                      >
+                        生成中 {video.progress ? `${video.progress}%` : ''}
+                      </Chip>
                     )}
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1000&auto=format&fit=crop';
-                    }}
-                  />
-                  
-                  {/* 进度条 */}
-                  {video.status === 'processing' && video.progress !== undefined && (
-                    <div className="absolute bottom-0 left-0 right-0 h-1 bg-slate-200">
-                      <div 
-                        className="h-full bg-blue-500 transition-all duration-300"
-                        style={{ width: `${video.progress}%` }}
-                      />
-                    </div>
-                  )}
-                  
-                  {/* Overlay - 只在完成时显示 */}
-                  {video.status === 'completed' && (
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-4">
-                      <div className="flex items-center justify-center absolute inset-0">
-                        <button 
-                          onClick={() => window.open(video.url, '_blank')}
-                          className="w-12 h-12 rounded-full bg-cyan-500 text-white flex items-center justify-center transform scale-0 group-hover:scale-100 transition-transform duration-300 shadow-lg shadow-cyan-500/30 hover:bg-cyan-400"
-                        >
-                          <Play size={20} fill="currentColor" className="ml-1" />
-                        </button>
+                    {video.status === 'completed' && (
+                      <Chip 
+                        className="absolute top-2 left-2 z-10" 
+                        color="success" 
+                        variant="shadow"
+                        startContent={<CheckCircle2 size={14} />}
+                      >
+                        已完成
+                      </Chip>
+                    )}
+                    {video.status === 'failed' && (
+                      <Chip 
+                        className="absolute top-2 left-2 z-10" 
+                        color="danger" 
+                        variant="shadow"
+                        startContent={<XCircle size={14} />}
+                      >
+                        失败
+                      </Chip>
+                    )}
+                    
+                    <img 
+                      src={video.thumbnail || video.url} 
+                      alt={video.productName}
+                      className={cn(
+                        "w-full h-full object-cover transition-transform duration-500",
+                        video.status === 'completed' && "group-hover:scale-110",
+                        video.status === 'processing' && "opacity-50"
+                      )}
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1000&auto=format&fit=crop';
+                      }}
+                    />
+                    
+                    {/* 进度条 - 使用 Progress */}
+                    {video.status === 'processing' && video.progress !== undefined && (
+                      <div className="absolute bottom-0 left-0 right-0">
+                        <Progress 
+                          size="sm" 
+                          value={video.progress} 
+                          color="primary"
+                          className="rounded-none"
+                        />
                       </div>
-                    </div>
-                  )}
+                    )}
+                    
+                    {/* Overlay - 只在完成时显示 */}
+                    {video.status === 'completed' && (
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-4">
+                        <div className="flex items-center justify-center absolute inset-0">
+                          <Button
+                            isIconOnly
+                            color="primary"
+                            variant="shadow"
+                            className="w-14 h-14 transform scale-0 group-hover:scale-100 transition-transform duration-300"
+                            onPress={() => window.open(video.url, '_blank')}
+                          >
+                            <Play size={24} fill="currentColor" className="ml-1" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
 
-                  {/* Top Actions */}
-                  <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button 
-                      onClick={() => deleteVideo(video.id)}
-                      className="p-2 bg-white/90 backdrop-blur-md text-red-500 hover:text-red-600 rounded-lg hover:bg-white transition-colors shadow-sm"
-                      title="删除视频"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    {/* Top Actions */}
+                    <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                      <Tooltip content="删除视频" color="danger">
+                        <Button
+                          isIconOnly
+                          size="sm"
+                          color="danger"
+                          variant="shadow"
+                          onPress={() => deleteVideo(video.id)}
+                        >
+                          <Trash2 size={14} />
+                        </Button>
+                      </Tooltip>
+                    </div>
                   </div>
-                </div>
+                </CardBody>
 
                 {/* Info */}
-                <div className="p-4 border-t border-slate-100 bg-white">
-                  <h3 className="font-bold text-slate-800 truncate mb-1" title={video.productName}>
+                <CardFooter className="flex-col items-start gap-2">
+                  <h3 className="font-semibold text-slate-900 truncate w-full" title={video.productName}>
                     {video.productName}
                   </h3>
-                  <div className="flex items-center justify-between text-xs text-slate-500">
+                  <div className="flex items-center justify-between w-full text-xs text-slate-500">
                     <div className="flex items-center gap-1">
                       <Clock size={12} />
                       {formatDate(video.createdAt)}
                     </div>
                     {video.status === 'completed' && (
-                      <button 
-                        className="flex items-center gap-1 text-cyan-600 hover:text-cyan-500 transition-colors font-medium"
-                        onClick={() => window.open(video.url, '_blank')}
+                      <Button 
+                        size="sm"
+                        variant="light"
+                        color="primary"
+                        startContent={<Download size={12} />}
+                        className="h-6 min-w-0 px-2 text-xs"
+                        onPress={() => window.open(video.url, '_blank')}
                       >
-                        <Download size={12} />
                         下载
-                      </button>
-                    )}
-                    {video.status === 'processing' && (
-                      <span className="text-blue-600 font-medium">
-                        处理中...
-                      </span>
-                    )}
-                    {video.status === 'failed' && (
-                      <span className="text-red-600 font-medium" title={video.error}>
-                        生成失败
-                      </span>
+                      </Button>
                     )}
                   </div>
                   {/* 处理中的视频显示手动查询按钮 */}
                   {video.status === 'processing' && (
-                    <>
-                      <button
-                        onClick={() => handleManualQuery(video)}
-                        disabled={querying[video.id]}
-                        className="mt-2 w-full flex items-center justify-center gap-2 px-3 py-2 bg-cyan-50 hover:bg-cyan-100 text-cyan-700 text-xs font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed border border-cyan-200"
-                      >
-                        {querying[video.id] ? (
-                          <>
-                            <Loader2 size={14} className="animate-spin" />
-                            查询中...
-                          </>
-                        ) : (
-                          <>
-                            <RefreshCw size={14} />
-                            刷新
-                          </>
-                        )}
-                      </button>
-                    </>
+                    <Button
+                      size="sm"
+                      color="primary"
+                      variant="flat"
+                      className="w-full"
+                      startContent={querying[video.id] ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                      isLoading={querying[video.id]}
+                      onPress={() => handleManualQuery(video)}
+                    >
+                      {querying[video.id] ? '查询中...' : '刷新状态'}
+                    </Button>
                   )}
-                </div>
-              </div>
+                </CardFooter>
+              </Card>
             ))}
           </div>
         )}

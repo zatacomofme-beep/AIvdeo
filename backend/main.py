@@ -7,9 +7,11 @@ import asyncio
 import requests
 import base64
 import bcrypt  # 新增：密码加密
+import json  # 新增：JSON处理
+import re  # 新增：正则表达式
 from typing import Any, List, Optional
 from io import BytesIO
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 import boto3
 from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, Request
@@ -28,6 +30,9 @@ from database import (
     get_db, test_connection, init_database,
     User, Product, Project, Video, Character, SavedPrompt, CreditHistory, GeneratedImage
 )
+
+# 导入微信支付模块
+from wechat_pay import create_native_order, query_order, verify_callback_signature, decrypt_callback_resource
 
 # 导入prompt配置
 from prompts import (
@@ -522,6 +527,14 @@ async def generate_video_with_ai(prompt: str, images: Optional[List[str]] = None
     # 添加负面提示词
     if negative_prompts and len(negative_prompts) > 0:
         enhanced_prompt = f"{enhanced_prompt}\n\nAvoid: {', '.join(negative_prompts)}"
+    
+    # 限制 prompt 长度，防止超过 API 限制
+    MAX_PROMPT_LENGTH = 3000  # 增加到3000字符，给越南语等多字节字符留出空间
+    if len(enhanced_prompt) > MAX_PROMPT_LENGTH:
+        print(f"[VIDEO GENERATION] ⚠️ Prompt 过长 ({len(enhanced_prompt)} 字符)，截断至 {MAX_PROMPT_LENGTH} 字符")
+        # 安全截断：确保不破坏 UTF-8 多字节字符
+        enhanced_prompt = enhanced_prompt[:MAX_PROMPT_LENGTH]
+        # 不添加 "..."，直接截断
     if not VIDEO_API_KEY:
         # 如果没有配置，返回模拟 URL
         await asyncio.sleep(1)
@@ -538,6 +551,16 @@ async def generate_video_with_ai(prompt: str, images: Optional[List[str]] = None
             "Accept": "application/json"
         }
         
+        # 转换 orientation 参数：前端使用 vertical/horizontal，API需要 portrait/landscape
+        orientation_mapping = {
+            'vertical': 'portrait',
+            'horizontal': 'landscape',
+            'portrait': 'portrait',  # 兼容直接传 portrait
+            'landscape': 'landscape'  # 兼容直接传 landscape
+        }
+        api_orientation = orientation_mapping.get(orientation, 'portrait')
+        print(f"[VIDEO GENERATION] 原始 orientation: {orientation}, 转换后: {api_orientation}")
+        
         # 构建请求数据（符合云雾API规范）
         # API文档：https://yunwu.apifox.cn/api-358068907.md
         # 使用前端传来的size参数（small或large）
@@ -545,7 +568,7 @@ async def generate_video_with_ai(prompt: str, images: Optional[List[str]] = None
             "model": VIDEO_MODEL_NAME,  # sora-2 或 sora-2-pro
             "prompt": enhanced_prompt,  # 使用增强后的Prompt
             "images": images if images else [],
-            "orientation": orientation,  # portrait 或 landscape
+            "orientation": api_orientation,  # 使用转换后的值：portra it 或 landscape
             "size": size,  # 使用前端传来的size（small或large）
             "duration": duration,  # ✅ 使用前端传入的duration（15或25）
             "watermark": watermark,  # 布尔值
@@ -634,6 +657,24 @@ async def generate_video_with_ai(prompt: str, images: Optional[List[str]] = None
 # ======================
 # 工具函数
 # ======================
+
+def to_beijing_timestamp(dt: datetime) -> int:
+    """
+    将 datetime 对象转换为北京时间的毫秒时间戳
+    数据库存储的是 UTC 时间，需要转换为北京时间（UTC+8）
+    """
+    if dt is None:
+        return None
+    # 如果 dt 没有时区信息，假设它是 UTC 时间
+    if dt.tzinfo is None:
+        utc_dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        utc_dt = dt
+    # 转换为北京时间（UTC+8）
+    beijing_tz = timezone(timedelta(hours=8))
+    beijing_dt = utc_dt.astimezone(beijing_tz)
+    # 返回毫秒时间戳
+    return int(beijing_dt.timestamp() * 1000)
 
 def build_public_url(bucket: str, key: str) -> str:
     """
@@ -1124,7 +1165,7 @@ async def get_generated_images(user_id: str, db: Session = Depends(get_db)):
                     "originalUrl": img.original_url,
                     "modelName": img.model_name,
                     "creditsCost": img.credits_cost,
-                    "createdAt": int(img.created_at.timestamp() * 1000),
+                    "createdAt": to_beijing_timestamp(img.created_at),
                     "tags": img.tags or [],
                     "category": img.category
                 }
@@ -1724,8 +1765,6 @@ async def generate_script_ai(req: GenerateScriptAIRequest):
         print(f"[AI生成脚本] 原始响应: {content[:200]}...")
         
         # 解析JSON
-        import json
-        import re
         json_match = re.search(r'```(?:json)?\s*({[\s\S]+?})\s*```', content)
         if json_match:
             json_str = json_match.group(1)
@@ -1747,13 +1786,201 @@ async def generate_script_ai(req: GenerateScriptAIRequest):
         
     except json.JSONDecodeError as e:
         print(f"JSON解析错误: {e}")
-        print(f"原始内容: {content}")
+        # 在异常处理中，content 可能未定义，需要容错处理
+        try:
+            print(f"原始内容: {content}")
+        except:
+            print("原始内容: <未获取>")
         raise HTTPException(status_code=500, detail=f"AI返回数据解析失败: {str(e)}")
     except Exception as e:
         print(f"脚本生成错误: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"生成脚本失败: {str(e)}")
+
+
+# 新增：翻译脚本 API
+class TranslateScriptRequest(BaseModel):
+    script: str
+    source_language: str  # 源语言（如 'en', 'zh-CN', 'auto'）
+    target_language: str  # 目标语言（如 'zh-CN', 'en'）
+
+
+@app.post("/api/translate-script")
+async def translate_script(req: TranslateScriptRequest):
+    """
+    翻译视频脚本（支持中英文互译）
+    使用百度翻译 API
+    注意：角色台词（包含在 '台词:' 后面的内容）不翻译
+    """
+    try:
+        import hashlib
+        import random
+        import requests
+        import re
+        
+        print(f"[翻译脚本] 源语言: {req.source_language}, 目标语言: {req.target_language}")
+        print(f"[翻译脚本] 原始脚本长度: {len(req.script)} 字")
+        
+        # 百度翻译配置（免费版，每月200万字符）
+        BAIDU_APPID = "20250101002251733"  # 请替换为您的百度翻译APPID
+        BAIDU_SECRET = "r5PcdcZivOQjdSx2GnMx"  # 请替换为您的密钥
+        BAIDU_API_URL = "https://fanyi-api.baidu.com/api/trans/vip/translate"
+        
+        # 语言代码映射（百度翻译格式）
+        lang_map = {
+            'zh-CN': 'zh',
+            'zh': 'zh',
+            'en': 'en',
+            'en-US': 'en',
+            'de': 'de',
+            'es': 'spa',
+            'th': 'th',
+            'vi': 'vie',
+            'vi-VN': 'vie',
+            'ja': 'jp',
+            'fil': 'en',  # 菲律宾语转英语
+            'ms': 'may',
+            'id': 'id',
+            'id-ID': 'id',
+            'auto': 'auto'
+        }
+        
+        source_lang = lang_map.get(req.source_language, 'auto')
+        target_lang = lang_map.get(req.target_language, 'zh')
+        
+        def baidu_translate(text: str) -> str:
+            """调用百度翻译API"""
+            if not text.strip():
+                return text
+            
+            salt = str(random.randint(32768, 65536))
+            sign_str = BAIDU_APPID + text + salt + BAIDU_SECRET
+            sign = hashlib.md5(sign_str.encode()).hexdigest()
+            
+            params = {
+                'q': text,
+                'from': source_lang,
+                'to': target_lang,
+                'appid': BAIDU_APPID,
+                'salt': salt,
+                'sign': sign
+            }
+            
+            response = requests.get(BAIDU_API_URL, params=params, timeout=10)
+            result = response.json()
+            
+            if 'trans_result' in result:
+                return result['trans_result'][0]['dst']
+            else:
+                error_msg = result.get('error_msg', '翻译失败')
+                print(f"[百度翻译错误] {error_msg}")
+                return text  # 翻译失败返回原文
+        
+        # 按行分割脚本
+        lines = req.script.split('\n')
+        translated_lines = []
+        
+        # 批量提取需要翻译的文本（提高效率，减少API调用）
+        texts_to_translate = []  # [(行索引, 文本位置标记, 原文)]
+        
+        for idx, line in enumerate(lines):
+            # 如果是空行，直接保留
+            if not line.strip():
+                translated_lines.append(line)
+                continue
+            
+            # 检查是否包含"台词:"（台词内容不翻译，但其他部分翻译）
+            if '台词:' in line:
+                # 分离前缀、台词
+                parts = line.split('台词:', 1)
+                if len(parts) == 2:
+                    prefix = parts[0].strip()
+                    dialogue = parts[1]  # 台词保持原文
+                    
+                    # 提取前缀中需要翻译的部分（时间戳、动作、情绪等）
+                    # 示例: [0-3s] 动作: xxx 情绪: xxx 台词: yyy
+                    # 翻译 [0-3s] 动作: xxx 情绪: xxx，保留台词
+                    if prefix:
+                        texts_to_translate.append((idx, 'prefix', prefix))
+                    translated_lines.append(None)  # 占位，稍后填充
+                else:
+                    translated_lines.append(line)
+                continue
+            
+            # 检查是否是时间戳行（如 [0-3s] 描述）
+            if re.match(r'^\[\d+-\d+s\]', line.strip()):
+                match = re.match(r'^(\[\d+-\d+s\])\s*(.*)$', line)
+                if match:
+                    timestamp = match.group(1)
+                    description = match.group(2).strip()
+                    if description:
+                        texts_to_translate.append((idx, 'timestamp', f"{timestamp} {description}"))
+                        translated_lines.append(None)  # 占位
+                    else:
+                        translated_lines.append(line)
+                else:
+                    translated_lines.append(line)
+                continue
+            
+            # 检查是否是带标签的行（如 动作:、情绪: 等）
+            label_match = re.match(r'^([^:：]+)[：:]\s*(.*)$', line)
+            if label_match:
+                texts_to_translate.append((idx, 'label', line))
+                translated_lines.append(None)  # 占位
+            else:
+                # 普通文本行
+                if line.strip():
+                    texts_to_translate.append((idx, 'plain', line))
+                    translated_lines.append(None)  # 占位
+                else:
+                    translated_lines.append(line)
+        
+        # 批量翻译（将多行合并为一次API调用，用换行符分隔）
+        if texts_to_translate:
+            print(f"[翻译] 共需翻译 {len(texts_to_translate)} 个文本片段")
+            
+            for idx, position, text in texts_to_translate:
+                try:
+                    translated_text = baidu_translate(text)
+                    
+                    # 根据位置标记还原格式
+                    if position == 'prefix':
+                        # 获取原行，提取台词部分
+                        original_line = lines[idx]
+                        dialogue_part = original_line.split('台词:', 1)[1]
+                        translated_lines[idx] = f"{translated_text} 台词:{dialogue_part}"
+                    
+                    elif position == 'timestamp':
+                        translated_lines[idx] = translated_text
+                    
+                    elif position == 'label':
+                        # 带标签的行，保持格式
+                        translated_lines[idx] = translated_text
+                    
+                    elif position == 'plain':
+                        translated_lines[idx] = translated_text
+                    
+                except Exception as e:
+                    print(f"[翻译错误] 行 {idx}: {str(e)}")
+                    translated_lines[idx] = lines[idx]  # 翻译失败保留原文
+        
+        # 合并翻译后的行
+        translated_script = '\n'.join(translated_lines)
+        print(f"[翻译完成] 翻译后长度: {len(translated_script)} 字")
+        
+        return {
+            "success": True,
+            "translated_script": translated_script,
+            "source_language": req.source_language,
+            "target_language": req.target_language
+        }
+        
+    except Exception as e:
+        print(f"翻译脚本错误: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"翻译失败: {str(e)}")
 
 
 class CreateCharacterRequest(BaseModel):
@@ -1817,6 +2044,74 @@ async def create_character(req: CreateCharacterRequest, db: Session = Depends(ge
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"创建角色失败: {str(e)}")
+
+
+# 更新角色请求模型
+class UpdateCharacterRequest(BaseModel):
+    character_id: str  # 角色ID
+    user_id: str  # 用户ID
+    name: str
+    description: str
+    age: Optional[int] = None
+    gender: Optional[str] = None
+    style: Optional[str] = None
+    tags: Optional[List[str]] = None
+
+
+@app.put("/api/update-character")
+async def update_character(req: UpdateCharacterRequest, db: Session = Depends(get_db)):
+    """
+    更新角色信息
+    """
+    try:
+        # 查找角色
+        character = db.query(Character).filter(
+            Character.id == req.character_id,
+            Character.user_id == req.user_id  # 验证为当前用户的角色
+        ).first()
+        
+        if not character:
+            raise HTTPException(status_code=404, detail="角色不存在或无权限修改")
+        
+        print(f"[更新角色] 角色ID: {req.character_id}")
+        print(f"[更新角色] 用户ID: {req.user_id}")
+        print(f"[更新角色] 新名称: {req.name}")
+        
+        # 更新字段
+        character.name = req.name
+        character.description = req.description
+        character.age = req.age
+        character.gender = req.gender
+        character.style = req.style
+        character.tags = req.tags
+        character.updated_at = datetime.now()  # 更新时间
+        
+        db.commit()
+        db.refresh(character)
+        
+        # 返回成功响应
+        return {
+            "success": True,
+            "character_id": req.character_id,
+            "data": {
+                "id": character.id,
+                "name": character.name,
+                "description": character.description,
+                "age": character.age,
+                "gender": character.gender,
+                "style": character.style,
+                "tags": character.tags
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"[更新角色错误] {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"更新角色失败: {str(e)}")
 
 
 # ======================
@@ -1888,7 +2183,7 @@ async def register_user(req: RegisterRequest, db: Session = Depends(get_db)):
                 "username": req.username,
                 "credits": 100,
                 "role": "user",
-                "createdAt": int(new_user.created_at.timestamp() * 1000) if new_user.created_at else None
+                "createdAt": to_beijing_timestamp(new_user.created_at)
             },
             "message": "注册成功！获得100积分奖励"
         }
@@ -1932,7 +2227,7 @@ async def login_user(req: LoginRequest, db: Session = Depends(get_db)):
                 "username": user.username,
                 "credits": user.credits,
                 "role": user.role,
-                "createdAt": int(user.created_at.timestamp() * 1000) if user.created_at else None
+                "createdAt": to_beijing_timestamp(user.created_at)
             },
             "message": "登录成功"
         }
@@ -1966,7 +2261,7 @@ async def get_public_videos(db: Session = Depends(get_db)):
                     "thumbnail": v.thumbnail_url,
                     "script": v.script,
                     "productName": v.product_name,
-                    "createdAt": v.created_at.timestamp() * 1000 if v.created_at else None,
+                    "createdAt": to_beijing_timestamp(v.created_at),
                     "status": v.status,
                     "isPublic": v.is_public
                 }
@@ -2017,7 +2312,7 @@ async def get_all_users(db: Session = Depends(get_db)):
                     "username": u.username,
                     "credits": u.credits,
                     "role": u.role,
-                    "createdAt": u.created_at.timestamp() * 1000 if u.created_at else None,
+                    "createdAt": to_beijing_timestamp(u.created_at),
                     "isActive": u.is_active
                 }
                 for u in users
@@ -2045,7 +2340,7 @@ async def get_all_videos(db: Session = Depends(get_db)):
                     "productName": v.product_name,
                     "status": v.status,
                     "isPublic": v.is_public,
-                    "createdAt": v.created_at.timestamp() * 1000 if v.created_at else None
+                    "createdAt": to_beijing_timestamp(v.created_at)
                 }
                 for v in videos
             ]
@@ -2068,7 +2363,7 @@ async def get_all_prompts(db: Session = Depends(get_db)):
                     "userId": p.user_id,
                     "content": p.content,
                     "productName": p.product_name,
-                    "createdAt": p.created_at.timestamp() * 1000 if p.created_at else None
+                    "createdAt": to_beijing_timestamp(p.created_at)
                 }
                 for p in prompts
             ]
@@ -2111,6 +2406,79 @@ async def delete_video_admin(video_id: str, db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         print(f"删除视频失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/admin/user/{user_id}/credits")
+async def update_user_credits_old(user_id: str, credits: int, db: Session = Depends(get_db)):
+    """
+    更新用户积分（管理员）
+    """
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="用户不存在")
+        
+        old_credits = user.credits
+        user.credits = credits
+        
+        # 记录积分变动
+        credit_history = CreditHistory(
+            id=str(uuid.uuid4()),
+            user_id=user_id,
+            action="管理员调整积分",
+            amount=credits - old_credits,
+            balance_after=credits,
+            description=f"管理员将积分从 {old_credits} 调整为 {credits}"
+        )
+        db.add(credit_history)
+        db.commit()
+        
+        return {"success": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"更新用户积分失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# 新增：更新用户信息接口
+class UpdateUserRequest(BaseModel):
+    username: Optional[str] = None
+
+@app.put("/api/users/{user_id}")
+async def update_user(user_id: str, req: UpdateUserRequest, db: Session = Depends(get_db)):
+    """
+    更新用户信息（用户名）
+    """
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="用户不存在")
+        
+        # 更新用户名
+        if req.username:
+            user.username = req.username
+            user.updated_at = datetime.utcnow()
+        
+        db.commit()
+        db.refresh(user)
+        
+        return {
+            "success": True,
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "username": user.username,
+                "credits": user.credits,
+                "role": user.role,
+                "createdAt": to_beijing_timestamp(user.created_at)
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"更新用户信息失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.put("/api/admin/user/{user_id}/credits")
@@ -2178,9 +2546,12 @@ class SaveVideoRequest(BaseModel):
     project_id: Optional[str] = None
     video_url: str
     thumbnail_url: Optional[str] = None
-    script: Optional[dict] = None
+    script: Optional[str] = None  # 修改为字符串类型
     product_name: Optional[str] = None
     prompt: Optional[str] = None
+    status: Optional[str] = 'completed'  # 新增 status 字段
+    task_id: Optional[str] = None  # 新增 task_id 字段
+    progress: Optional[int] = 0  # 新增 progress 字段
     is_public: bool = False
 
 class SavePromptRequest(BaseModel):
@@ -2213,7 +2584,7 @@ async def create_project(req: CreateProjectRequest, db: Session = Depends(get_db
                 "productName": new_project.product_name,
                 "productDescription": new_project.product_description,
                 "status": new_project.status,
-                "createdAt": new_project.created_at.timestamp() * 1000 if new_project.created_at else None
+                "createdAt": to_beijing_timestamp(new_project.created_at)
             }
         }
     except Exception as e:
@@ -2236,7 +2607,7 @@ async def get_user_projects(user_id: str, db: Session = Depends(get_db)):
                     "productDescription": p.product_description,
                     "status": p.status,
                     "createdAt": p.created_at.timestamp() * 1000 if p.created_at else None,
-                    "updatedAt": p.updated_at.timestamp() * 1000 if p.updated_at else None
+                    "updatedAt": to_beijing_timestamp(p.updated_at)
                 }
                 for p in projects
             ]
@@ -2261,7 +2632,9 @@ async def save_video(req: SaveVideoRequest, db: Session = Depends(get_db)):
             script=req.script,
             product_name=req.product_name,
             prompt=req.prompt,
-            status='completed',
+            status=req.status or 'completed',
+            task_id=req.task_id,
+            progress=req.progress or 0,
             is_public=req.is_public
         )
         db.add(new_video)
@@ -2274,7 +2647,11 @@ async def save_video(req: SaveVideoRequest, db: Session = Depends(get_db)):
                 "id": new_video.id,
                 "url": new_video.video_url,
                 "thumbnail": new_video.thumbnail_url,
+                "script": new_video.script,
                 "productName": new_video.product_name,
+                "status": new_video.status,
+                "taskId": new_video.task_id,
+                "progress": new_video.progress,
                 "isPublic": new_video.is_public,
                 "createdAt": new_video.created_at.timestamp() * 1000 if new_video.created_at else None
             }
@@ -2300,8 +2677,10 @@ async def get_user_videos(user_id: str, db: Session = Depends(get_db)):
                     "script": v.script,
                     "productName": v.product_name,
                     "status": v.status,
+                    "taskId": v.task_id,  # 添加 taskId 字段
+                    "progress": v.progress or 0,  # 添加 progress 字段
                     "isPublic": v.is_public,
-                    "createdAt": v.created_at.timestamp() * 1000 if v.created_at else None
+                    "createdAt": to_beijing_timestamp(v.created_at)
                 }
                 for v in videos
             ]
@@ -2374,7 +2753,7 @@ async def get_user_prompts(user_id: str, db: Session = Depends(get_db)):
                     "id": p.id,
                     "content": p.content,
                     "productName": p.product_name,
-                    "createdAt": p.created_at.timestamp() * 1000 if p.created_at else None
+                    "createdAt": to_beijing_timestamp(p.created_at)
                 }
                 for p in prompts
             ]
@@ -2623,7 +3002,7 @@ async def get_credit_history(user_id: str, db: Session = Depends(get_db)):
                     "amount": h.amount,
                     "balanceAfter": h.balance_after,
                     "description": h.description,
-                    "createdAt": h.created_at.timestamp() * 1000 if h.created_at else None
+                    "createdAt": to_beijing_timestamp(h.created_at)
                 }
                 for h in history
             ]
@@ -2649,7 +3028,7 @@ async def get_user_characters(user_id: str, db: Session = Depends(get_db)):
                     "gender": c.gender,
                     "style": c.style,
                     "tags": c.tags,
-                    "createdAt": c.created_at.timestamp() * 1000 if c.created_at else None
+                    "createdAt": to_beijing_timestamp(c.created_at)
                 }
                 for c in characters
             ]
@@ -2726,7 +3105,7 @@ async def get_user_products(user_id: str, db: Session = Depends(get_db)):
                     "sellingPoints": p.selling_points,  # 修复：返回 selling_points
                     "imageUrls": p.image_urls,  # 修复：使用 image_urls 字段
                     "createdAt": p.created_at.timestamp() * 1000 if p.created_at else None,
-                    "updatedAt": p.updated_at.timestamp() * 1000 if p.updated_at else None
+                    "updatedAt": to_beijing_timestamp(p.updated_at)
                 }
                 for p in products
             ]
@@ -2765,7 +3144,7 @@ async def get_product_detail(product_id: str, db: Session = Depends(get_db)):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.put("/api/product/{product_id}")
+@app.put("/api/products/{product_id}")
 async def update_product(product_id: str, req: UpdateProductRequest, db: Session = Depends(get_db)):
     """
     更新商品信息
@@ -2775,21 +3154,24 @@ async def update_product(product_id: str, req: UpdateProductRequest, db: Session
         if not product:
             raise HTTPException(status_code=404, detail="商品不存在")
         
-        # 更新字段
+        # 更新字段（根据前端传递的字段）
         if req.name is not None:
             product.name = req.name
-        if req.description is not None:
-            product.description = req.description
         if req.category is not None:
             product.category = req.category
-        if req.price is not None:
-            product.price = req.price
-        if req.images is not None:
-            product.images = req.images
-        if req.specs is not None:
-            product.specs = req.specs
+        # 前端传递的description实际是usage字段
+        if req.description is not None:
+            product.usage = req.description
+        # 前端传递的是sellingPoints字符串，直接存储
         if req.selling_points is not None:
-            product.selling_points = req.selling_points
+            # 如果是列表，转为字符串
+            if isinstance(req.selling_points, list):
+                product.selling_points = ', '.join(req.selling_points)
+            else:
+                product.selling_points = req.selling_points
+        # 前端传递的imageUrls
+        if req.images is not None:
+            product.image_urls = req.images
         
         db.commit()
         db.refresh(product)
@@ -2799,12 +3181,11 @@ async def update_product(product_id: str, req: UpdateProductRequest, db: Session
             "product": {
                 "id": product.id,
                 "name": product.name,
-                "description": product.description,
                 "category": product.category,
-                "price": product.price,
-                "images": product.images,
-                "specs": product.specs,
+                "usage": product.usage,
                 "sellingPoints": product.selling_points,
+                "imageUrls": product.image_urls,
+                "createdAt": product.created_at.timestamp() * 1000 if product.created_at else None,
                 "updatedAt": product.updated_at.timestamp() * 1000 if product.updated_at else None
             }
         }
@@ -2813,6 +3194,8 @@ async def update_product(product_id: str, req: UpdateProductRequest, db: Session
     except Exception as e:
         db.rollback()
         print(f"更新商品失败: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/api/product/{product_id}")
@@ -2885,7 +3268,7 @@ async def delete_image(req: DeleteImageRequest):
 # 微信支付 API
 # ======================
 
-from wechat_pay import create_native_order, verify_callback, query_order, xml_to_dict
+from wechat_pay import create_native_order, verify_callback_signature, decrypt_callback_resource, query_order
 
 class CreateOrderRequest(BaseModel):
     """创建订单请求"""
@@ -2903,10 +3286,10 @@ class OrderResponse(BaseModel):
 
 # 充值套餐配置
 PACKAGES = {
-    'small': {'amount': 10, 'credits': 100, 'name': '小额充值'},
-    'medium': {'amount': 50, 'credits': 520, 'name': '标准充值'},
-    'large': {'amount': 100, 'credits': 1100, 'name': '超值充值'},
-    'super': {'amount': 500, 'credits': 5800, 'name': '高级充值'},
+    'small': {'amount': 10, 'credits': 1000, 'name': '小额充值'},
+    'medium': {'amount': 50, 'credits': 5200, 'name': '标准充值'},
+    'large': {'amount': 100, 'credits': 11000, 'name': '超值充值'},
+    'super': {'amount': 500, 'credits': 58000, 'name': '高级充值'},
 }
 
 @app.post("/api/wechat/create-order")
@@ -2961,80 +3344,106 @@ async def create_wechat_order(req: CreateOrderRequest, db: Session = Depends(get
 @app.post("/api/wechat/callback")
 async def wechat_pay_callback(request: Request, db: Session = Depends(get_db)):
     """
-    微信支付回调通知
+    微信支付V3回调通知
     """
-    # 读取XML数据
-    xml_data = await request.body()
-    data = xml_to_dict(xml_data.decode('utf-8'))
+    # 读取JSON数据
+    body = await request.body()
+    body_str = body.decode('utf-8')
     
-    print(f"[WECHAT CALLBACK] 收到回调: {data}")
+    # 获取签名相关头
+    timestamp = request.headers.get('Wechatpay-Timestamp', '')
+    nonce = request.headers.get('Wechatpay-Nonce', '')
+    signature = request.headers.get('Wechatpay-Signature', '')
+    serial_no = request.headers.get('Wechatpay-Serial', '')
+    
+    print(f"[WECHAT CALLBACK V3] 收到回调: {body_str}")
     
     # 验证签名
-    if not verify_callback(data):
-        print("[WECHAT CALLBACK] 签名验证失败")
-        return Response(
-            content="<xml><return_code><![CDATA[FAIL]]></return_code><return_msg><![CDATA[签名验证失败]]></return_msg></xml>",
-            media_type="application/xml"
-        )
+    if not verify_callback_signature(timestamp, nonce, body_str, signature, serial_no):
+        print("[WECHAT CALLBACK V3] 签名验证失败")
+        return {"code": "FAIL", "message": "签名验证失败"}
     
-    # 检查支付状态
-    if data.get('return_code') == 'SUCCESS' and data.get('result_code') == 'SUCCESS':
-        order_no = data.get('out_trade_no')
-        transaction_id = data.get('transaction_id')
-        total_fee = int(data.get('total_fee', 0))
-        user_id = data.get('attach')  # 从附加数据获取user_id
+    try:
+        # 解析JSON
+        callback_data = json.loads(body_str)
+        event_type = callback_data.get('event_type')
         
-        print(f"[WECHAT CALLBACK] 支付成功: {order_no}, 用户: {user_id}, 金额: {total_fee}分")
+        if event_type == 'TRANSACTION.SUCCESS':
+            # 解密resource
+            resource = callback_data.get('resource', {})
+            decrypted_data = decrypt_callback_resource(
+                nonce=resource.get('nonce'),
+                associated_data=resource.get('associated_data'),
+                ciphertext=resource.get('ciphertext')
+            )
+            
+            if not decrypted_data:
+                print("[WECHAT CALLBACK V3] 解密失败")
+                return {"code": "FAIL", "message": "解密失败"}
+            
+            # 获取订单信息
+            order_no = decrypted_data.get('out_trade_no')
+            transaction_id = decrypted_data.get('transaction_id')
+            trade_state = decrypted_data.get('trade_state')
+            amount_data = decrypted_data.get('amount', {})
+            total_fee = amount_data.get('total', 0)  # 分
+            user_id = decrypted_data.get('attach')  # 从附加数据获取user_id
+            
+            print(f"[WECHAT CALLBACK V3] 支付成功: {order_no}, 用户: {user_id}, 金额: {total_fee}分")
+            
+            if trade_state == 'SUCCESS':
+                # 给用户充值积分
+                amount_yuan = total_fee / 100
+                credits_to_add = 0
+                
+                for package in PACKAGES.values():
+                    if package['amount'] == amount_yuan:
+                        credits_to_add = package['credits']
+                        break
+                
+                if credits_to_add > 0 and user_id:
+                    try:
+                        # 检查订单是否已处理（防止重复充值）
+                        existing_history = db.query(CreditHistory).filter(
+                            CreditHistory.related_id == order_no,
+                            CreditHistory.action == 'recharge'
+                        ).first()
+                        
+                        if existing_history:
+                            print(f"[WECHAT CALLBACK V3] ⚠️ 订单已处理，跳过: {order_no}")
+                            return {"code": "SUCCESS", "message": "订单已处理"}
+                        
+                        user = db.query(User).filter(User.id == user_id).first()
+                        if user:
+                            old_credits = user.credits
+                            user.credits += credits_to_add
+                            
+                            # 记录积分历史
+                            history = CreditHistory(
+                                id=str(uuid.uuid4()),
+                                user_id=user_id,
+                                action='recharge',
+                                amount=credits_to_add,
+                                balance_after=user.credits,
+                                description=f"微信支付充值￥{amount_yuan}（订单号: {order_no}）",
+                                related_id=order_no
+                            )
+                            db.add(history)
+                            db.commit()
+                            
+                            print(f"[WECHAT CALLBACK V3] ✅ 积分充值成功: {old_credits} -> {user.credits} (+{credits_to_add})")
+                    except Exception as e:
+                        print(f"[WECHAT CALLBACK V3] 积分充值失败: {e}")
+                        db.rollback()
         
-        # TODO: 更新订单状态
-        # order = db.query(Order).filter(Order.order_no == order_no).first()
-        # if order and order.status == 'pending':
-        #     order.status = 'paid'
-        #     order.transaction_id = transaction_id
-        #     order.paid_at = datetime.utcnow()
-        #     db.commit()
+        # 返回SUCCESS给微信
+        return {"code": "SUCCESS", "message": "成功"}
         
-        # 给用户充值积分（根据金额计算积分）
-        # 查找对应的套餐
-        amount_yuan = total_fee / 100
-        credits_to_add = 0
-        
-        for package in PACKAGES.values():
-            if package['amount'] == amount_yuan:
-                credits_to_add = package['credits']
-                break
-        
-        if credits_to_add > 0 and user_id:
-            try:
-                # 给用户加积分
-                user = db.query(User).filter(User.id == user_id).first()
-                if user:
-                    old_credits = user.credits
-                    user.credits += credits_to_add
-                    
-                    # 记录积分历史
-                    history = CreditHistory(
-                        id=str(uuid.uuid4()),
-                        user_id=user_id,
-                        action='recharge',
-                        amount=credits_to_add,
-                        balance_after=user.credits,
-                        description=f"微信支付充值￥{amount_yuan}",
-                        related_id=order_no
-                    )
-                    db.add(history)
-                    db.commit()
-                    
-                    print(f"[WECHAT CALLBACK] ✅ 积分充值成功: {old_credits} -> {user.credits} (+{credits_to_add})")
-            except Exception as e:
-                print(f"[WECHAT CALLBACK] 积分充值失败: {e}")
-                db.rollback()
-    
-    # 返回SUCCESS给微信
-    return Response(
-        content="<xml><return_code><![CDATA[SUCCESS]]></return_code><return_msg><![CDATA[OK]]></return_msg></xml>",
-        media_type="application/xml"
-    )
+    except Exception as e:
+        print(f"[WECHAT CALLBACK V3] 处理回调失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"code": "FAIL", "message": str(e)}
 
 @app.get("/api/wechat/query-order/{order_no}")
 async def query_wechat_order(order_no: str):

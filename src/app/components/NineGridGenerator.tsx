@@ -191,7 +191,6 @@ export function NineGridGenerator() {
                       ? "border-tech bg-tech-light/20" 
                       : "border-slate-300 hover:border-slate-400 bg-slate-50"
                   )}>
-                    <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10" />
                     {previewUrl ? (
                       <div className="relative space-y-4">
                         <img 
@@ -220,10 +219,10 @@ export function NineGridGenerator() {
                   onClick={handleGenerate}
                   disabled={!selectedFile || isGenerating}
                   className={cn(
-                    "w-full mt-4 px-6 py-4 rounded-xl font-semibold text-white transition-all flex items-center justify-center gap-2",
+                    "w-full mt-4 px-6 py-4 rounded-md font-medium text-white transition-all flex items-center justify-center gap-2",
                     !selectedFile || isGenerating
                       ? "bg-slate-300 cursor-not-allowed"
-                      : "bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 shadow-lg shadow-cyan-500/30"
+                      : "btn-tech-ai shadow-tech-sm hover:shadow-tech-md"
                   )}
                 >
                   {isGenerating ? (
@@ -242,9 +241,9 @@ export function NineGridGenerator() {
 
               {/* Tips */}
               <div className="space-y-4">
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <h3 className="font-semibold text-blue-900 mb-2">📸 最佳图片要求</h3>
-                  <ul className="text-sm text-blue-800 space-y-1">
+                <div className="tech-card p-4 bg-slate-50">
+                  <h3 className="font-semibold text-slate-900 mb-2">📸 最佳图片要求</h3>
+                  <ul className="text-sm text-slate-700 space-y-1">
                     <li>• 白色或浅色简洁背景</li>
                     <li>• 商品居中放置，占比适中</li>
                     <li>• 图片清晰，光线均匀</li>
@@ -252,9 +251,9 @@ export function NineGridGenerator() {
                   </ul>
                 </div>
 
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <h3 className="font-semibold text-green-900 mb-2">✨ 生成效果</h3>
-                  <ul className="text-sm text-green-800 space-y-1">
+                <div className="tech-card p-4 bg-slate-50">
+                  <h3 className="font-semibold text-slate-900 mb-2">✨ 生成效果</h3>
+                  <ul className="text-sm text-slate-700 space-y-1">
                     <li>• 3×3 网格布局，共9个视角</li>
                     <li>• 2K高清分辨率（1920×1920）</li>
                     <li>• 自动生成多角度展示</li>
@@ -262,9 +261,9 @@ export function NineGridGenerator() {
                   </ul>
                 </div>
 
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                  <h3 className="font-semibold text-amber-900 mb-2">💡 使用提示</h3>
-                  <ul className="text-sm text-amber-800 space-y-1">
+                <div className="tech-card p-4 bg-slate-50">
+                  <h3 className="font-semibold text-slate-900 mb-2">💡 使用提示</h3>
+                  <ul className="text-sm text-slate-700 space-y-1">
                     <li>• 生成后可在商品创建时选用</li>
                     <li>• 图片永久保存在图片库</li>
                     <li>• 每次生成消耗50积分</li>
@@ -275,14 +274,14 @@ export function NineGridGenerator() {
           </div>
 
           {/* Generated Images Grid */}
-          <div className="bg-white/60 backdrop-blur-sm rounded-2xl border border-slate-200/60 p-8">
-            <h2 className="text-lg font-semibold text-slate-800 mb-4">
+          <div className="tech-card p-8">
+            <h2 className="text-lg font-semibold text-slate-900 mb-4">
               我的九宫格图片库 ({generatedImages.length})
             </h2>
 
             {isLoading ? (
               <div className="flex items-center justify-center py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-2 border-cyan-500 border-t-transparent" />
+                <div className="animate-spin rounded-full h-8 w-8 border-2 border-tech border-t-transparent" />
               </div>
             ) : generatedImages.length === 0 ? (
               <div className="text-center py-12">
@@ -294,7 +293,7 @@ export function NineGridGenerator() {
                 {generatedImages.map((image) => (
                   <div 
                     key={image.id}
-                    className="group bg-white rounded-xl border border-slate-200 overflow-hidden hover:shadow-lg transition-all"
+                    className="tech-card group overflow-hidden hover:shadow-tech-md transition-all"
                   >
                     {/* Image */}
                     <div className="aspect-square bg-slate-100 relative overflow-hidden">

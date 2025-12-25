@@ -5,6 +5,7 @@ import { cn } from '../lib/utils';
 import { api } from '../../lib/api';
 import { CharacterSelector } from './CharacterSelector';
 import { showToast } from '../lib/toast-utils';
+import { Button, Input, Textarea, Select, SelectItem, Progress, Chip, Card, CardBody } from '@heroui/react';
 
 const API_BASE_URL = 'https://semopic.com';
 
@@ -60,7 +61,7 @@ export function DirectorPanel() {
     country: videoConfig?.country || '',
     language: videoConfig?.language || '',
     style: videoConfig?.style || '', // 新增：视频风格
-    orientation: videoConfig?.orientation || 'portrait' as 'portrait' | 'landscape',  // ✅ 使用portrait/landscape
+    orientation: videoConfig?.orientation || 'vertical' as 'vertical' | 'horizontal',
     resolution: videoConfig?.resolution || '1080p' as '720p' | '1080p',
     duration: videoConfig?.duration || '15s' as '15s' | '25s'
   });
@@ -199,11 +200,18 @@ export function DirectorPanel() {
         return;
       }
       
+      // 转换 orientation 参数：前端使用 vertical/horizontal，API需要 portrait/landscape
+      const orientationMapping: { [key: string]: string } = {
+        'vertical': 'portrait',
+        'horizontal': 'landscape'
+      };
+      const apiOrientation = orientationMapping[configForm.orientation] || 'portrait';
+      
       // 调用后端API生成视频
       const result = await api.generateVideo(
         script,  // prompt
         uploadedImages || [],  // images
-        configForm.orientation,  // orientation (portrait/landscape)
+        apiOrientation,  // orientation (portrait/landscape)
         configForm.resolution === '720p' ? 'small' : 'large',  // size
         duration  // duration
       );
@@ -211,7 +219,7 @@ export function DirectorPanel() {
       // 立即添加到视频列表
       const videoId = addGeneratedVideo({
         url: result.url || '',
-        thumbnail: result.thumbnail || uploadedImages[0] || '',
+        thumbnail: uploadedImages[0] || '',
         script: script,
         productName: currentProduct?.name || '未命名产品',
         status: result.status === 'completed' ? 'completed' : 'processing',
@@ -311,11 +319,11 @@ export function DirectorPanel() {
 
   return (
     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 animate-in fade-in duration-300">
-      <div className="w-[700px] max-h-[90vh] glass-card flex flex-col shadow-2xl rounded-2xl overflow-hidden border border-white/60 bg-white/90">
+      <div className="w-[700px] max-h-[90vh] tech-card flex flex-col shadow-tech-lg rounded-lg overflow-hidden bg-white">
         {/* Header */}
         <div className="h-20 flex items-center justify-between px-8 border-b border-slate-100 shrink-0 bg-white/60 backdrop-blur-md">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-yellow-400 to-amber-500 rounded-xl flex items-center justify-center shadow-md shadow-yellow-500/20 text-white">
+            <div className="w-12 h-12 bg-tech rounded-md flex items-center justify-center shadow-tech-sm text-white">
               <Sparkles size={24} />
             </div>
             <div>
@@ -343,9 +351,9 @@ export function DirectorPanel() {
                   <div className={cn(
                     "w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all duration-500 shadow-sm",
                     currentStep === step.num
-                      ? "bg-gradient-to-r from-yellow-400 to-amber-500 text-white scale-110 shadow-yellow-500/20"
+                      ? "bg-tech text-white scale-110 shadow-tech-sm"
                       : currentStep > step.num
-                      ? "bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-green-500/20"
+                      ? "bg-green-600 text-white shadow-sm"
                       : "bg-white border border-slate-200 text-slate-400"
                   )}>
                     {currentStep > step.num ? "✓" : step.num}
@@ -365,8 +373,7 @@ export function DirectorPanel() {
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-8 custom-scrollbar relative">
           {/* Decorative diffuse elements inside panel */}
-          <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-100/30 rounded-full blur-[80px] pointer-events-none" />
-          <div className="absolute bottom-0 left-0 w-64 h-64 bg-purple-100/30 rounded-full blur-[80px] pointer-events-none" />
+
 
           {/* Step 1: Select Product */}
           {currentStep === 1 && (
@@ -481,7 +488,7 @@ export function DirectorPanel() {
                       setShowDirector(false);
                       setShowCreateProduct(true);
                     }}
-                    className="px-6 py-3 bg-gradient-to-r from-yellow-400 to-amber-500 text-white rounded-xl hover:shadow-lg hover:shadow-yellow-500/30 transition-all font-medium inline-flex items-center gap-2"
+                    className="btn-tech-ai px-6 py-3 inline-flex items-center gap-2"
                   >
                     <Plus size={20} />
                     创建第一个商品
@@ -504,9 +511,9 @@ export function DirectorPanel() {
           {/* Step 3: Video Config */}
           {currentStep === 3 && (
             <div className="space-y-6 relative z-10 animate-in slide-in-from-right-10 duration-500">
-              <div className="glass p-4 rounded-xl border border-purple-200 bg-purple-50/50 flex items-start gap-3">
-                <div className="w-1.5 h-1.5 rounded-full bg-purple-500 mt-2 shrink-0" />
-                <p className="text-sm text-purple-800/80 leading-relaxed">
+              <div className="tech-card p-4 bg-slate-50 flex items-start gap-3">
+                <div className="w-1.5 h-1.5 rounded-full bg-tech mt-2 shrink-0" />
+                <p className="text-sm text-slate-700 leading-relaxed">
                   定制您的视频参数，我们支持生成适配不同平台（TikTok, Shorts, Reels）的视频格式。
                 </p>
               </div>
@@ -520,7 +527,7 @@ export function DirectorPanel() {
                     <select
                       value={configForm.country}
                       onChange={(e) => setConfigForm({ ...configForm, country: e.target.value })}
-                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 appearance-none focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-100 transition-all hover:border-slate-300"
+                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-md text-slate-900 appearance-none focus:outline-none focus:border-tech focus:ring-2 focus:ring-tech/20 transition-all hover:border-slate-300"
                     >
                       <option value="" className="text-slate-400">请选择投放国家</option>
                       <option value="china">🇨🇳 中国</option>
@@ -551,7 +558,7 @@ export function DirectorPanel() {
                     <select
                       value={configForm.language}
                       onChange={(e) => setConfigForm({ ...configForm, language: e.target.value })}
-                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 appearance-none focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-100 transition-all hover:border-slate-300"
+                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-md text-slate-900 appearance-none focus:outline-none focus:border-tech focus:ring-2 focus:ring-tech/20 transition-all hover:border-slate-300"
                     >
                       <option value="" className="text-slate-400">请选择视频语言</option>
                       <option value="zh-CN">中文</option>
@@ -581,7 +588,7 @@ export function DirectorPanel() {
                   value={configForm.style}
                   onChange={(e) => setConfigForm({ ...configForm, style: e.target.value })}
                   placeholder="如：UGC真实手持、专业产品展示、创意动画风格等"
-                  className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-100 transition-all hover:border-slate-300"
+                  className="w-full px-4 py-3 bg-white border border-slate-200 rounded-md text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-tech focus:ring-2 focus:ring-tech/20 transition-all hover:border-slate-300"
                 />
                 <p className="mt-2 text-xs text-slate-500">
                   描述您期望的视频风格，AI将据此生成相应的脚本和镜头设计
@@ -594,25 +601,25 @@ export function DirectorPanel() {
                 </label>
                 <div className="grid grid-cols-2 gap-4">
                   <button
-                    onClick={() => setConfigForm({ ...configForm, orientation: 'portrait' })}
+                    onClick={() => setConfigForm({ ...configForm, orientation: 'vertical' })}
                     className={cn(
                       "px-4 py-4 border-2 rounded-xl transition-all text-center relative overflow-hidden group",
-                      configForm.orientation === 'portrait'
+                      configForm.orientation === 'vertical'
                         ? "border-yellow-400 bg-yellow-50 text-slate-900 shadow-sm"
                         : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 text-slate-600"
                     )}
                   >
                     <div className="text-base font-bold mb-1">📱 竖屏</div>
                     <div className="text-xs text-slate-500">9:16 (TikTok/Shorts)</div>
-                    {configForm.orientation === 'portrait' && (
+                    {configForm.orientation === 'vertical' && (
                       <div className="absolute inset-0 bg-yellow-400/5 pointer-events-none" />
                     )}
                   </button>
                   <button
-                    onClick={() => setConfigForm({ ...configForm, orientation: 'landscape' })}
+                    onClick={() => setConfigForm({ ...configForm, orientation: 'horizontal' })}
                     className={cn(
                       "px-4 py-4 border-2 rounded-xl transition-all text-center relative overflow-hidden group",
-                      configForm.orientation === 'landscape'
+                      configForm.orientation === 'horizontal'
                         ? "border-yellow-400 bg-yellow-50 text-slate-900 shadow-sm"
                         : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 text-slate-600"
                     )}
@@ -689,11 +696,11 @@ export function DirectorPanel() {
           {/* Step 4: Script */}
           {currentStep === 4 && (
             <div className="space-y-6 relative z-10 animate-in slide-in-from-right-10 duration-500">
-              <div className="glass p-4 rounded-xl border border-cyan-200 bg-cyan-50/50">
+              <div className="tech-card p-4 bg-tech-light/20 border-tech/30">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-3">
-                     <div className="w-1.5 h-1.5 rounded-full bg-cyan-500 mt-0.5 shrink-0" />
-                     <p className="text-sm text-cyan-800/80">
+                     <div className="w-1.5 h-1.5 rounded-full bg-tech mt-0.5 shrink-0" />
+                     <p className="text-sm text-slate-700">
                        AI 已准备就绪，点击右侧按钮生成专业分镜脚本。
                      </p>
                   </div>
@@ -707,7 +714,7 @@ export function DirectorPanel() {
                     onClick={handleGenerateScript}
                     disabled={isGeneratingScript}
                     className={cn(
-                      "px-5 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white rounded-lg flex items-center gap-2 transition-all text-sm font-medium shadow-md shadow-cyan-500/20",
+                      "btn-tech-ai px-5 py-2.5 flex items-center gap-2 text-sm",
                       isGeneratingScript && "opacity-50 cursor-not-allowed"
                     )}
                   >
@@ -736,10 +743,10 @@ export function DirectorPanel() {
                       onChange={(e) => setScript(e.target.value)}
                       placeholder="等待生成或手动输入脚本..."
                       rows={15}
-                      className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100 transition-all font-mono text-sm leading-relaxed custom-scrollbar shadow-inner"
+                      className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-md text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-tech focus:ring-2 focus:ring-tech/20 transition-all font-mono text-sm leading-relaxed custom-scrollbar"
                     />
                     {/* Glow effect on focus/hover */}
-                    <div className="absolute inset-0 rounded-xl pointer-events-none border border-cyan-500/0 group-hover:border-cyan-500/20 transition-colors" />
+                    <div className="absolute inset-0 rounded-md pointer-events-none border border-tech/0 group-hover:border-tech/20 transition-colors" />
                 </div>
                 
                 <div className="flex justify-between items-center mt-3 px-1">
@@ -813,7 +820,7 @@ export function DirectorPanel() {
                   }
                 }}
                 disabled={currentStep === 1 && !currentProduct}
-                className="px-8 py-3 bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 text-white font-bold rounded-xl flex items-center gap-2 transition-all shadow-md shadow-yellow-500/20 hover:shadow-lg hover:shadow-yellow-500/30 transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                className="btn-tech-ai px-8 py-3 font-bold flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 下一步
                 <ChevronRight size={18} />
@@ -826,7 +833,7 @@ export function DirectorPanel() {
                   "px-8 py-3 font-bold rounded-xl flex items-center gap-2 transition-all shadow-lg transform hover:-translate-y-0.5",
                   isGenerating || !script.trim()
                     ? "bg-slate-200 text-slate-400 cursor-not-allowed transform-none shadow-none"
-                    : "bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white shadow-cyan-500/30 hover:shadow-cyan-500/40"
+                    : "btn-tech-ai"
                 )}
               >
                 {isGenerating ? (

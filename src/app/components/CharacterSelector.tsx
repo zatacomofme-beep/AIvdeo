@@ -191,9 +191,9 @@ export function CharacterSelector({ onSelectCharacter, selectedCharacter }: Char
 
   return (
     <div className="space-y-6 relative z-10 animate-in slide-in-from-right-10 duration-500">
-      <div className="glass p-4 rounded-xl border border-purple-200 bg-purple-50/50 flex items-start gap-3">
-        <div className="w-1.5 h-1.5 rounded-full bg-purple-500 mt-2 shrink-0" />
-        <p className="text-sm text-purple-800/80 leading-relaxed">
+      <div className="p-4 rounded-md border border-sky-200 bg-sky-50/50 flex items-start gap-3">
+        <div className="w-1.5 h-1.5 rounded-full bg-tech mt-2 shrink-0" />
+        <p className="text-sm text-sky-800/80 leading-relaxed">
           选择一个角色作为视频的主角，或创建一个新角色。角色信息将用于生成更符合人设的视频脚本。
         </p>
       </div>
@@ -207,7 +207,7 @@ export function CharacterSelector({ onSelectCharacter, selectedCharacter }: Char
           <p className="text-sm text-slate-500 mb-6">创建您的第一个虚拟角色</p>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white rounded-lg transition-all shadow-md shadow-purple-500/20 hover:shadow-purple-500/30"
+            className="flex items-center gap-2 px-6 py-3 btn-tech-ai rounded-md"
           >
             <Plus size={20} />
             创建角色
@@ -219,52 +219,52 @@ export function CharacterSelector({ onSelectCharacter, selectedCharacter }: Char
             <h3 className="text-sm font-medium text-slate-700">选择角色</h3>
             <button
               onClick={() => setShowCreateModal(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg transition-all text-sm font-medium border border-purple-200"
+              className="flex items-center gap-2 px-4 py-2 bg-sky-50 hover:bg-sky-100 text-tech rounded-md transition-all text-sm font-medium border border-sky-200"
             >
               <Plus size={16} />
               新建角色
             </button>
           </div>
 
-          <div className="grid grid-cols-2 gap-4 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
+          <div className="grid grid-cols-3 gap-3 max-h-[380px] overflow-y-auto custom-scrollbar pr-2">
             {myCharacters.map((character) => (
               <button
                 key={character.id}
                 onClick={() => onSelectCharacter(character)}
                 className={cn(
-                  "relative bg-white border-2 rounded-xl overflow-hidden transition-all duration-300 text-left group p-4",
+                  "relative bg-white border-2 rounded-lg overflow-hidden transition-all duration-300 text-left group p-3",
                   selectedCharacter?.id === character.id
-                    ? "border-purple-500 shadow-lg shadow-purple-500/20 scale-[1.02]"
-                    : "border-slate-200 hover:border-purple-300 hover:shadow-md"
+                    ? "border-tech shadow-tech-md scale-[1.02]"
+                    : "border-slate-200 hover:border-tech/50 hover:shadow-sm"
                 )}
               >
                 {/* 选中标记 */}
                 {selectedCharacter?.id === character.id && (
-                  <div className="absolute top-3 right-3 w-6 h-6 bg-purple-500 rounded-full flex items-center justify-center">
-                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="absolute top-2 right-2 w-5 h-5 bg-tech rounded-full flex items-center justify-center shadow-sm">
+                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                     </svg>
                   </div>
                 )}
 
                 {/* 角色信息 */}
-                <div className="space-y-2">
-                  <h4 className="font-bold text-base text-slate-800 pr-8">{character.name}</h4>
-                  <p className="text-sm text-slate-600 line-clamp-3 leading-relaxed">{character.description}</p>
+                <div className="space-y-1.5">
+                  <h4 className="font-bold text-sm text-slate-800 pr-6 truncate">{character.name}</h4>
+                  <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed min-h-[2rem]">{character.description}</p>
                   
-                  <div className="flex items-center gap-2 pt-2">
+                  <div className="flex items-center gap-1.5 flex-wrap pt-1">
                     {character.gender && (
-                      <span className="text-xs px-2 py-1 bg-slate-100 text-slate-700 rounded">
+                      <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-700 rounded">
                         {character.gender}
                       </span>
                     )}
                     {character.age && (
-                      <span className="text-xs px-2 py-1 bg-slate-100 text-slate-700 rounded">
+                      <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-700 rounded">
                         {character.age}岁
                       </span>
                     )}
                     {character.style && (
-                      <span className="text-xs px-2 py-1 bg-purple-50 text-purple-700 rounded">
+                      <span className="text-[10px] px-1.5 py-0.5 bg-sky-50 text-tech rounded">
                         {character.style}
                       </span>
                     )}
@@ -272,11 +272,11 @@ export function CharacterSelector({ onSelectCharacter, selectedCharacter }: Char
 
                   {/* 标签 */}
                   {character.tags && character.tags.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      {character.tags.map((tag, index) => (
+                    <div className="flex flex-wrap gap-1 pt-0.5">
+                      {character.tags.slice(0, 2).map((tag, index) => (
                         <span 
                           key={index}
-                          className="text-[11px] px-2 py-0.5 bg-white border border-slate-200 text-slate-600 rounded-full"
+                          className="text-[10px] px-1.5 py-0.5 bg-white border border-slate-200 text-slate-600 rounded-full"
                         >
                           {tag}
                         </span>
@@ -302,17 +302,17 @@ export function CharacterSelector({ onSelectCharacter, selectedCharacter }: Char
       {/* Create Character Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-0">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-tech-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b border-slate-200 p-6 flex items-center justify-between z-10">
               <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                <Plus className="text-purple-600" size={24} />
+                <Plus className="text-tech" size={24} />
                 创建新角色
               </h3>
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleAIGenerate}
                   disabled={isGeneratingAI}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white rounded-lg text-sm font-medium transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center gap-1.5 px-4 py-2 btn-tech-ai text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                   title="使用AI生成角色信息"
                 >
                   {isGeneratingAI ? (
@@ -338,8 +338,8 @@ export function CharacterSelector({ onSelectCharacter, selectedCharacter }: Char
 
             <form onSubmit={handleSubmit} className="p-6 space-y-6">
               {/* 国家、人种、年龄、性别 - 先填写这4个参数 */}
-              <div className="bg-gradient-to-r from-purple-50 to-blue-50 p-4 rounded-xl border border-purple-200">
-                <h4 className="text-sm font-semibold text-purple-900 mb-3 flex items-center gap-2">
+              <div className="bg-sky-50 p-4 rounded-md border border-sky-200">
+                <h4 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
                   <Wand2 size={16} />
                   请先填写以下4个参数，然后点击“AI生成”
                 </h4>
@@ -351,7 +351,7 @@ export function CharacterSelector({ onSelectCharacter, selectedCharacter }: Char
                     <select
                       value={formData.country}
                       onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-tech/20 focus:border-tech transition-all"
                     >
                       <option value="">请选择国家</option>
                       <option value="中国">中国</option>
@@ -389,7 +389,7 @@ export function CharacterSelector({ onSelectCharacter, selectedCharacter }: Char
                     <select
                       value={formData.ethnicity}
                       onChange={(e) => setFormData({ ...formData, ethnicity: e.target.value })}
-                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-tech/20 focus:border-tech transition-all"
                     >
                       <option value="">请选择人种</option>
                       <optgroup label="东亚">
@@ -434,7 +434,7 @@ export function CharacterSelector({ onSelectCharacter, selectedCharacter }: Char
                       placeholder="例如：28"
                       min="18"
                       max="80"
-                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-tech/20 focus:border-tech transition-all"
                     />
                   </div>
 
@@ -445,7 +445,7 @@ export function CharacterSelector({ onSelectCharacter, selectedCharacter }: Char
                     <select
                       value={formData.gender}
                       onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
-                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-tech/20 focus:border-tech transition-all"
                     >
                       <option value="">请选择性别</option>
                       <option value="男">男</option>
@@ -464,7 +464,7 @@ export function CharacterSelector({ onSelectCharacter, selectedCharacter }: Char
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   placeholder="例如：李小明"
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-tech/20 focus:border-tech transition-all"
                   required
                 />
               </div>
@@ -478,7 +478,7 @@ export function CharacterSelector({ onSelectCharacter, selectedCharacter }: Char
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   placeholder="描述角色的背景、性格、特征等..."
                   rows={4}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all resize-none"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-tech/20 focus:border-tech transition-all resize-none"
                   required
                 />
               </div>
@@ -492,7 +492,7 @@ export function CharacterSelector({ onSelectCharacter, selectedCharacter }: Char
                   value={formData.style}
                   onChange={(e) => setFormData({ ...formData, style: e.target.value })}
                   placeholder="例如：写实、卡通、赛博朋克"
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-tech/20 focus:border-tech transition-all"
                 />
               </div>
 
@@ -505,7 +505,7 @@ export function CharacterSelector({ onSelectCharacter, selectedCharacter }: Char
                   value={formData.tags}
                   onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
                   placeholder="例如：年轻, 活力, 科技"
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-tech/20 focus:border-tech transition-all"
                 />
                 <p className="text-xs text-slate-500 mt-1">使用中文或英文逗号分隔多个标签</p>
               </div>
@@ -520,7 +520,7 @@ export function CharacterSelector({ onSelectCharacter, selectedCharacter }: Char
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white rounded-lg transition-all font-medium shadow-md shadow-purple-500/20 hover:shadow-purple-500/30"
+                  className="flex-1 px-6 py-3 btn-tech-ai rounded-md font-semibold"
                 >
                   创建角色
                 </button>

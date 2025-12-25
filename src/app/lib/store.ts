@@ -135,10 +135,11 @@ interface AppStore {
   setCredits: (credits: number) => void;
   
   // My Assets actions
-  addGeneratedVideo: (video: Omit<GeneratedVideo, 'id' | 'createdAt'>) => void;
+  addGeneratedVideo: (videoData: Omit<GeneratedVideo, 'id' | 'createdAt'>) => Promise<string>;
   updateVideoStatus: (videoId: string, updates: Partial<GeneratedVideo>) => void;  // 新增：更新视频状态
   deleteVideo: (videoId: string) => void;
   savePrompt: (prompt: Omit<SavedPrompt, 'id' | 'createdAt'>) => void;
+  updatePrompt: (promptId: string, content: string) => void;  // 新增：更新提示词
   deletePrompt: (promptId: string) => void;
   addCharacter: (character: Omit<Character, 'id' | 'createdAt'>) => void;
   deleteCharacter: (characterId: string) => void;
@@ -291,13 +292,69 @@ export const useStore = create<AppStore>()(persist((set) => ({
   })),
   
   // My Assets actions
-  addGeneratedVideo: (videoData) => set((state) => ({
-    myVideos: [{
-      ...videoData,
-      id: Date.now().toString(),
-      createdAt: Date.now()
-    }, ...state.myVideos]
-  })),
+  addGeneratedVideo: async (videoData) => {
+    const state = useStore.getState();
+    if (!state.user?.id) {
+      // 用户未登录，只保存到本地
+      set((state) => ({
+        myVideos: [{
+          ...videoData,
+          id: Date.now().toString(),
+          createdAt: Date.now()
+        }, ...state.myVideos]
+      }));
+      return Date.now().toString();
+    }
+
+    try {
+      const { api } = await import('../../lib/api');
+      
+      // 调用后端API保存视频
+      const response = await api.saveVideo({
+        user_id: state.user.id,
+        video_url: videoData.url,
+        thumbnail_url: videoData.thumbnail,
+        script: videoData.script,
+        product_name: videoData.productName,
+        status: videoData.status,
+        task_id: videoData.taskId,
+        progress: videoData.progress || 0,
+        is_public: false
+      });
+
+      if (response.success) {
+        // 成功保存，添加到本地状态
+        set((state) => ({
+          myVideos: [{
+            id: response.video.id,
+            url: response.video.url,
+            thumbnail: response.video.thumbnail || '',
+            script: response.video.script,
+            productName: response.video.productName || '',
+            status: response.video.status,
+            isPublic: response.video.isPublic,
+            taskId: response.video.taskId,
+            progress: response.video.progress || 0,
+            createdAt: response.video.createdAt
+          }, ...state.myVideos]
+        }));
+        console.log('✅ 视频已保存到数据库');
+        return response.video.id;
+      }
+    } catch (error) {
+      console.error('保存视频失败:', error);
+      // 失败时仍然保存到本地
+      const localId = Date.now().toString();
+      set((state) => ({
+        myVideos: [{
+          ...videoData,
+          id: localId,
+          createdAt: Date.now()
+        }, ...state.myVideos]
+      }));
+      return localId;
+    }
+  },
   
   updateVideoStatus: (videoId, updates) => set((state) => ({
     myVideos: state.myVideos.map(video => 
@@ -309,17 +366,53 @@ export const useStore = create<AppStore>()(persist((set) => ({
     myVideos: state.myVideos.filter(v => v.id !== videoId)
   })),
   
-  savePrompt: (promptData) => set((state) => ({
-    myPrompts: [{
-      ...promptData,
-      id: Date.now().toString(),
-      createdAt: Date.now()
-    }, ...state.myPrompts]
+  savePrompt: async (promptData) => {
+    const state = useStore.getState();
+    if (!state.user?.id) return;
+
+    try {
+      const { api } = await import('../../lib/api');
+      const response = await api.savePrompt({
+        user_id: state.user.id,
+        content: promptData.content,
+        product_name: promptData.productName || ''
+      });
+
+      if (response.success) {
+        set((state) => ({
+          myPrompts: [response.prompt, ...state.myPrompts]
+        }));
+      }
+    } catch (error) {
+      console.error('保存提示词失败:', error);
+      // 失败时仍然保存到本地
+      set((state) => ({
+        myPrompts: [{
+          ...promptData,
+          id: Date.now().toString(),
+          createdAt: Date.now()
+        }, ...state.myPrompts]
+      }));
+    }
+  },
+    
+  updatePrompt: (promptId, content) => set((state) => ({
+    myPrompts: state.myPrompts.map(p => 
+      p.id === promptId ? { ...p, content } : p
+    )
   })),
   
-  deletePrompt: (promptId) => set((state) => ({
-    myPrompts: state.myPrompts.filter(p => p.id !== promptId)
-  })),
+  deletePrompt: async (promptId) => {
+    try {
+      const { api } = await import('../../lib/api');
+      await api.deletePrompt(promptId);
+      set((state) => ({
+        myPrompts: state.myPrompts.filter(p => p.id !== promptId)
+      }));
+    } catch (error) {
+      console.error('删除提示词失败:', error);
+    }
+  },
   
   addCharacter: (characterData) => set((state) => ({
     myCharacters: [{
@@ -398,16 +491,29 @@ export const useStore = create<AppStore>()(persist((set) => ({
       // 转换并设置视频数据
       const videos = videosResponse.videos.map(v => {
         console.log('[Store] 转换视频:', v);
+        
+        // 修复状态逻辑：根据实际情况修正状态
+        let correctStatus = v.status;
+        if (v.url && v.url !== '') {
+          // 如果有URL，状态应该是completed
+          correctStatus = 'completed';
+        } else if (v.error) {
+          // 如果有错误信息，状态应该是failed
+          correctStatus = 'failed';
+        }
+        
+        console.log(`[Store] 视频${v.id}：数据库状态=${v.status}, 修正后=${correctStatus}, url=${v.url ? '有' : '无'}`);
+        
         return {
           id: v.id,
           url: v.url,
           thumbnail: v.thumbnail || '',
           script: v.script,
           productName: v.productName || '',
-          status: v.status,
+          status: correctStatus,  // 使用修正后的状态
           isPublic: v.isPublic,
           taskId: v.taskId,
-          progress: v.progress,
+          progress: correctStatus === 'completed' ? 100 : (v.progress || 0),  // 已完成的视频进度为100
           error: v.error,
           createdAt: v.createdAt
         };

@@ -1,11 +1,11 @@
 import React from 'react';
-import { Package, Trash2, Clock, Tag, ShoppingBag, Plus } from 'lucide-react';
+import { useEffect } from 'react';
+import { Package, Trash2, Clock, Tag, ShoppingBag, Plus, Edit } from 'lucide-react';
 import { useStore } from '../../lib/store';
 import { cn } from '../../lib/utils';
-import { useEffect } from 'react';
 
 export function MyProducts() {
-  const { savedProducts, deleteProduct, loadProduct, setShowDirector, setCurrentStep, setShowCreateProduct, user, loadUserData } = useStore();
+  const { savedProducts, deleteProduct, loadProduct, setShowDirector, setCurrentStep, setShowCreateProduct, user, loadUserData, setCurrentProduct, setUploadedImages } = useStore();
 
   // ✅ 组件初始化时从数据库加载数据
   useEffect(() => {
@@ -30,6 +30,15 @@ export function MyProducts() {
     setCurrentStep(1);
   };
 
+  const handleEditProduct = (product: typeof savedProducts[0]) => {
+    // 设置当前编辑的商品
+    setCurrentProduct(product);
+    // 设置图片
+    setUploadedImages(product.imageUrls);
+    // 打开创建商品面板（将自动识别为编辑模式）
+    setShowCreateProduct(true);
+  };
+
   const getCategoryLabel = (category: string) => {
     const map: Record<string, string> = {
       electronics: '电子产品',
@@ -44,40 +53,39 @@ export function MyProducts() {
   };
 
   return (
-    <div className="flex-1 flex flex-col h-screen overflow-hidden bg-slate-50/30">
-      <div className="p-8 pb-4 flex items-center justify-between">
+    <div className="flex-1 flex flex-col h-screen overflow-hidden bg-white">
+      <div className="p-8 pb-4 border-b border-slate-200 flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900 flex items-center gap-3">
-            <ShoppingBag className="text-yellow-500" />
+          <h2 className="text-3xl font-semibold text-slate-900 flex items-center gap-3">
+            <ShoppingBag className="text-tech" size={32} />
             我的商品
-            <span className="text-sm font-normal text-slate-500 bg-white px-2 py-1 rounded-md border border-slate-200">
+            <span className="badge-tech ml-2">
               {savedProducts.length}
             </span>
           </h2>
-          <p className="text-slate-500 mt-2 text-sm">管理您的商品库，快速复用商品信息</p>
+          <p className="text-slate-600 mt-2 text-sm">管理您的商品库，快速复用商品信息</p>
         </div>
         
-        {/* 创建商品按钮 */}
         <button
           onClick={() => setShowCreateProduct(true)}
-          className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-yellow-400 to-amber-500 text-white rounded-xl hover:shadow-lg hover:shadow-yellow-500/30 transition-all font-medium"
+          className="btn-tech-ai flex items-center gap-2 px-6 py-3"
         >
           <Plus size={20} />
           创建商品
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-8 pt-0 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto p-8 pt-0 custom-scrollbar bg-slate-50">
         {savedProducts.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-slate-400">
-            <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mb-4 border border-slate-200 shadow-sm">
+            <div className="w-20 h-20 bg-slate-100 rounded-lg flex items-center justify-center mb-4 border border-slate-200">
               <Package size={40} className="text-slate-300" />
             </div>
             <p className="text-lg text-slate-600">暂无商品</p>
             <p className="text-sm mt-2 mb-4">点击右上角"创建商品"按钮开始</p>
             <button
               onClick={() => setShowCreateProduct(true)}
-              className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-yellow-400 to-amber-500 text-white rounded-xl hover:shadow-lg hover:shadow-yellow-500/30 transition-all font-medium"
+              className="btn-tech-ai flex items-center gap-2 px-6 py-3"
             >
               <Plus size={20} />
               创建第一个商品
@@ -88,9 +96,8 @@ export function MyProducts() {
             {savedProducts.map((product) => (
               <div 
                 key={product.id} 
-                className="group relative bg-white border border-slate-200 rounded-xl overflow-hidden hover:border-yellow-400/50 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:shadow-yellow-500/10"
+                className="tech-card group relative overflow-hidden hover:shadow-tech-md transition-all"
               >
-                {/* Image Area - 缩小图片区域 */}
                 <div className="h-32 relative bg-slate-50 p-2 flex items-center justify-center">
                   {product.imageUrls && product.imageUrls.length > 0 ? (
                     <img 
@@ -102,17 +109,22 @@ export function MyProducts() {
                     <Package size={32} className="text-slate-300" />
                   )}
                   
-                  {/* Category Badge */}
-                  <div className="absolute top-2 left-2 px-2 py-0.5 bg-white/90 backdrop-blur-md rounded text-xs text-slate-600 border border-slate-200 flex items-center gap-1 shadow-sm">
-                    <Tag size={8} className="text-yellow-500" />
+                  <div className="absolute top-2 left-2 px-2 py-0.5 bg-white/90 backdrop-blur-sm rounded text-xs text-slate-600 border border-slate-200 flex items-center gap-1">
+                    <Tag size={8} className="text-tech" />
                     {getCategoryLabel(product.category)}
                   </div>
 
-                  {/* Actions */}
-                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button 
+                      onClick={() => handleEditProduct(product)}
+                      className="p-1.5 bg-white/90 backdrop-blur-sm text-blue-500 hover:text-blue-600 rounded-md hover:bg-white transition-colors"
+                      title="编辑商品"
+                    >
+                      <Edit size={14} />
+                    </button>
                     <button 
                       onClick={() => deleteProduct(product.id)}
-                      className="p-1.5 bg-white/90 backdrop-blur-md text-red-500 hover:text-red-600 rounded-lg hover:bg-white transition-colors shadow-sm"
+                      className="p-1.5 bg-white/90 backdrop-blur-sm text-red-500 hover:text-red-600 rounded-md hover:bg-white transition-colors"
                       title="删除商品"
                     >
                       <Trash2 size={14} />
@@ -120,7 +132,6 @@ export function MyProducts() {
                   </div>
                 </div>
 
-                {/* Info - 精简信息区 */}
                 <div className="p-3 border-t border-slate-100 bg-white">
                   <h3 className="font-bold text-sm text-slate-900 truncate mb-1.5" title={product.name}>
                     {product.name}
@@ -132,7 +143,7 @@ export function MyProducts() {
 
                   <button 
                     onClick={() => handleUseProduct(product.id)}
-                    className="w-full py-1.5 bg-slate-50 hover:bg-yellow-400 hover:text-white text-slate-600 rounded-lg transition-all text-xs font-medium border border-slate-200 hover:border-yellow-400"
+                    className="w-full py-1.5 bg-slate-50 hover:bg-tech hover:text-white text-slate-600 rounded-md transition-all text-xs font-medium border border-slate-200 hover:border-tech"
                   >
                     使用此商品
                   </button>

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Heart, Play, User, Search, Filter, Loader2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -44,12 +44,12 @@ export function ContentSquare() {
   );
 
   return (
-    <div className="flex-1 overflow-y-auto custom-scrollbar p-8">
+    <div className="flex-1 overflow-y-auto custom-scrollbar p-8 bg-slate-50">
       {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800 mb-2">内容广场</h2>
-          <p className="text-slate-500">探索社区中最受欢迎的 AI 生成视频作品</p>
+          <h2 className="text-3xl font-semibold text-slate-900 mb-2">内容广场</h2>
+          <p className="text-slate-600">探索社区中最受欢迎的 AI 生成视频作品</p>
         </div>
         
         <div className="flex items-center gap-3">
@@ -60,10 +60,10 @@ export function ContentSquare() {
               placeholder="搜索作品..." 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100 transition-all w-64 shadow-sm"
+              className="pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-md text-sm focus:outline-none focus:border-tech focus:ring-2 focus:ring-tech/20 transition-all w-64"
             />
           </div>
-          <button className="p-2.5 bg-white border border-slate-200 rounded-xl text-slate-500 hover:text-slate-700 hover:border-slate-300 hover:bg-slate-50 transition-all shadow-sm">
+          <button className="p-2.5 bg-white border border-slate-200 rounded-md text-slate-500 hover:text-slate-700 hover:border-slate-300 hover:bg-slate-50 transition-all">
             <Filter size={18} />
           </button>
         </div>
@@ -75,10 +75,10 @@ export function ContentSquare() {
           <button
             key={tag}
             className={cn(
-              "px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all",
+              "px-4 py-1.5 rounded-md text-sm font-medium whitespace-nowrap transition-all",
               index === 0
-                ? "bg-cyan-500 text-white shadow-md shadow-cyan-500/20"
-                : "bg-white border border-slate-200 text-slate-600 hover:border-cyan-200 hover:text-cyan-600 hover:bg-cyan-50"
+                ? "bg-tech text-white"
+                : "bg-white border border-slate-200 text-slate-600 hover:border-tech/50 hover:text-tech hover:bg-tech-light/10"
             )}
           >
             {tag}
@@ -89,8 +89,8 @@ export function ContentSquare() {
       {/* Grid Content */}
       {loading ? (
         <div className="flex items-center justify-center py-20">
-          <Loader2 className="animate-spin text-cyan-500" size={40} />
-          <span className="ml-3 text-slate-500">加载中...</span>
+          <Loader2 className="animate-spin text-tech" size={40} />
+          <span className="ml-3 text-slate-500">加载�?..</span>
         </div>
       ) : filteredContents.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-slate-400">
@@ -103,7 +103,7 @@ export function ContentSquare() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {filteredContents.map((item) => (
-          <div key={item.id} className="group bg-white rounded-xl border border-slate-200 overflow-hidden hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-300 hover:-translate-y-1">
+          <div key={item.id} className="tech-card group overflow-hidden hover:shadow-tech-md transition-all">
             {/* Thumbnail */}
             <div className="aspect-[16/9] relative overflow-hidden bg-slate-100">
               <img 
@@ -123,7 +123,7 @@ export function ContentSquare() {
 
             {/* Info */}
             <div className="p-4">
-              <h3 className="font-semibold text-slate-800 mb-1 line-clamp-1 group-hover:text-cyan-600 transition-colors">
+              <h3 className="font-semibold text-slate-900 mb-1 line-clamp-1 group-hover:text-tech transition-colors">
                 {item.title}
               </h3>
               
