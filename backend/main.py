@@ -53,6 +53,10 @@ from routers.health import router as health_router
 from routers.user import router as user_router
 from routers.admin import router as admin_router
 from routers.video import router as video_router
+from routers.product import router as product_router
+from routers.prompt import router as prompt_router
+from routers.character import router as character_router
+from routers.project import router as project_router
 
 # 加载环境变量
 load_dotenv()
@@ -304,7 +308,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="SoraDirector Backend", version="0.1.0", docs_url=None, redoc_url=None, openapi_url="/openapi.json", lifespan=lifespan)
 
-# 注册新架构路由（渐进式重构 - 阶段1&2&3&4）
+# 注册新架构路由（渐进式重构 - 阶段1&2&3&4&5）
 app.include_router(health_router, tags=["Health Check"])
 print("[ROUTER] ✅ 健康检查路由已注册: /api/health")
 
@@ -316,6 +320,18 @@ print("[ROUTER] ✅ 管理员路由已注册: /api/admin/*")
 
 app.include_router(video_router, tags=["Video Management"])
 print("[ROUTER] ✅ 视频管理路由已注册: /api/videos, /api/public-videos")
+
+app.include_router(product_router, tags=["Product Management"])
+print("[ROUTER] ✅ 商品管理路由已注册: /api/products, /api/product")
+
+app.include_router(prompt_router, tags=["Prompt Management"])
+print("[ROUTER] ✅ 提示词管理路由已注册: /api/prompts")
+
+app.include_router(character_router, tags=["Character Management"])
+print("[ROUTER] ✅ 角色管理路由已注册: /api/characters")
+
+app.include_router(project_router, tags=["Project Management"])
+print("[ROUTER] ✅ 项目管理路由已注册: /api/projects")
 
 # CORS：开发阶段先全放开
 app.add_middleware(
