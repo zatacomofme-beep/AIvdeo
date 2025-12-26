@@ -70,6 +70,33 @@ VIDEO_MODEL_NAME = os.getenv("VIDEO_MODEL_NAME", "sora-2")
 VIDEO_API_KEY = os.getenv("VIDEO_GENERATION_API_KEY")
 VIDEO_BASE_URL = os.getenv("VIDEO_GENERATION_ENDPOINT", "https://yunwu.ai")
 
+# ✅ API令牌池：从环境变量读取，失败自动切换
+api_key_pool_str = os.getenv("API_KEY_POOL", "")
+API_KEY_POOL = [key.strip() for key in api_key_pool_str.split(",") if key.strip()]  # 用逗号分隔
+current_api_key_index = 0  # 当前API Key索引
+
+print(f"[API Pool] 加载了 {len(API_KEY_POOL)} 个API令牌")
+
+def get_next_api_key():
+    """
+    获取下一个API Key，实现轮询机制
+    """
+    global current_api_key_index
+    if not API_KEY_POOL:
+        return VIDEO_API_KEY  # 如果没有配置API_KEY_POOL，返回默认的VIDEO_API_KEY
+    
+    api_key = API_KEY_POOL[current_api_key_index]
+    current_api_key_index = (current_api_key_index + 1) % len(API_KEY_POOL)
+    return api_key
+
+def get_current_api_key():
+    """
+    获取当前API Key（不切换）
+    """
+    if not API_KEY_POOL:
+        return VIDEO_API_KEY  # 如果没有配置API_KEY_POOL，返回默认的VIDEO_API_KEY
+    return API_KEY_POOL[current_api_key_index]
+
 # Sora角色视频生成配置
 CHARACTER_VIDEO_MODEL_NAME = os.getenv("CHARACTER_VIDEO_MODEL_NAME", "sora-2")
 CHARACTER_VIDEO_API_KEY = os.getenv("CHARACTER_VIDEO_API_KEY")
@@ -1434,12 +1461,19 @@ async def generate_video(req: GenerateVideoRequest):
     调用 AI 视频生成服务（Sora）
     支持角色：如果传入character_id，则使用带Character的视频生成API
     """
+    # 修复：将 vertical 转换为 portrait，horizontal 转换为 landscape
+    orientation = req.orientation
+    if orientation == 'vertical':
+        orientation = 'portrait'
+    elif orientation == 'horizontal':
+        orientation = 'landscape'
+    
     # 打印前端传来的所有参数
     print("="*80)
     print("[视频生成] 前端请求参数:")
     print(f"  prompt: {req.prompt[:100]}..." if len(req.prompt) > 100 else f"  prompt: {req.prompt}")
     print(f"  images: {req.images}")
-    print(f"  orientation: {req.orientation}")
+    print(f"  orientation: {req.orientation} -> 转换为: {orientation}")
     print(f"  size: {req.size} <- 重点检查！")
     print(f"  duration: {req.duration}")
     print(f"  watermark: {req.watermark}")
@@ -1452,7 +1486,7 @@ async def generate_video(req: GenerateVideoRequest):
         result = await generate_video_with_ai(
             prompt=req.prompt,
             images=req.images,
-            orientation=req.orientation,
+            orientation=orientation,  # 使用转换后的orientation
             size=req.size,
             duration=req.duration,
             watermark=req.watermark,
@@ -2118,8 +2152,11 @@ async def delete_video_admin(video_id: str, db: Session = Depends(get_db)):
         print(f"删除视频失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+class UpdateCreditsRequest(BaseModel):
+    credits: int
+
 @app.put("/api/admin/user/{user_id}/credits")
-async def update_user_credits(user_id: str, credits: int, db: Session = Depends(get_db)):
+async def update_user_credits(user_id: str, req: UpdateCreditsRequest, db: Session = Depends(get_db)):
     """
     更新用户积分
     """
@@ -2129,16 +2166,16 @@ async def update_user_credits(user_id: str, credits: int, db: Session = Depends(
             raise HTTPException(status_code=404, detail="用户不存在")
         
         old_credits = user.credits
-        user.credits = credits
+        user.credits = req.credits
         
         # 记录积分变动
         credit_history = CreditHistory(
             id=str(uuid.uuid4()),
             user_id=user_id,
             action="管理员调整积分",
-            amount=credits - old_credits,
-            balance_after=credits,
-            description=f"管理员将积分从 {old_credits} 调整为 {credits}"
+            amount=req.credits - old_credits,
+            balance_after=req.credits,
+            description=f"管理员将积分从 {old_credits} 调整为 {req.credits}"
         )
         db.add(credit_history)
         db.commit()
@@ -2187,6 +2224,9 @@ class SaveVideoRequest(BaseModel):
     product_name: Optional[str] = None
     prompt: Optional[str] = None
     is_public: bool = False
+    task_id: Optional[str] = None  # 新增：Sora任务ID
+    status: Optional[str] = 'completed'  # 新增：视频状态
+    progress: Optional[int] = 0  # 新增：生成进度
 
 class SavePromptRequest(BaseModel):
     user_id: str
@@ -2266,8 +2306,10 @@ async def save_video(req: SaveVideoRequest, db: Session = Depends(get_db)):
             script=req.script,
             product_name=req.product_name,
             prompt=req.prompt,
-            status='completed',
-            is_public=req.is_public
+            status=req.status or 'completed',  # ✅ 使用前端传入的status
+            is_public=req.is_public,
+            task_id=req.task_id,  # ✅ 保存task_id
+            progress=req.progress or 0  # ✅ 保存progress
         )
         db.add(new_video)
         db.commit()
@@ -2279,14 +2321,20 @@ async def save_video(req: SaveVideoRequest, db: Session = Depends(get_db)):
                 "id": new_video.id,
                 "url": new_video.video_url,
                 "thumbnail": new_video.thumbnail_url,
+                "script": new_video.script,
                 "productName": new_video.product_name,
+                "status": new_video.status,  # ✅ 返回status
                 "isPublic": new_video.is_public,
+                "taskId": new_video.task_id,  # ✅ 返回taskId
+                "progress": new_video.progress or 0,  # ✅ 返回progress
                 "createdAt": new_video.created_at.timestamp() * 1000 if new_video.created_at else None
             }
         }
     except Exception as e:
         db.rollback()
         print(f"保存视频失败: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/videos/{user_id}")
@@ -2306,6 +2354,9 @@ async def get_user_videos(user_id: str, db: Session = Depends(get_db)):
                     "productName": v.product_name,
                     "status": v.status,
                     "isPublic": v.is_public,
+                    "taskId": v.task_id,  # ✅ 返回taskId
+                    "progress": v.progress or 0,  # ✅ 返回progress
+                    "error": v.error,  # ✅ 返回错误信息
                     "createdAt": v.created_at.timestamp() * 1000 if v.created_at else None
                 }
                 for v in videos
@@ -2313,6 +2364,57 @@ async def get_user_videos(user_id: str, db: Session = Depends(get_db)):
         }
     except Exception as e:
         print(f"获取视频列表失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/videos/{video_id}")
+async def update_video(video_id: str, req: SaveVideoRequest, db: Session = Depends(get_db)):
+    """
+    更新视频状态和URL（用于异步视频完成后的状态同步）
+    """
+    try:
+        video = db.query(Video).filter(Video.id == video_id).first()
+        if not video:
+            raise HTTPException(status_code=404, detail="视频不存在")
+        
+        # 更新视频字段
+        if req.video_url is not None:
+            video.video_url = req.video_url
+        if req.thumbnail_url is not None:
+            video.thumbnail_url = req.thumbnail_url
+        if req.status is not None:
+            video.status = req.status
+        if req.progress is not None:
+            video.progress = req.progress
+        if req.script is not None:
+            video.script = req.script
+        if req.product_name is not None:
+            video.product_name = req.product_name
+        
+        db.commit()
+        db.refresh(video)
+        
+        return {
+            "success": True,
+            "video": {
+                "id": video.id,
+                "url": video.video_url,
+                "thumbnail": video.thumbnail_url,
+                "script": video.script,
+                "productName": video.product_name,
+                "status": video.status,
+                "isPublic": video.is_public,
+                "taskId": video.task_id,
+                "progress": video.progress or 0,
+                "createdAt": video.created_at.timestamp() * 1000 if video.created_at else None
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"更新视频失败: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/api/videos/{video_id}")
@@ -2904,12 +3006,12 @@ class OrderResponse(BaseModel):
     credits: Optional[int] = None  # 获得积分
     error: Optional[str] = None
 
-# 充值套餐配置
+# 充值套餐配置（按照 1元=100积分 的规则）
 PACKAGES = {
-    'small': {'amount': 10, 'credits': 100, 'name': '小额充值'},
-    'medium': {'amount': 50, 'credits': 520, 'name': '标准充值'},
-    'large': {'amount': 100, 'credits': 1100, 'name': '超值充值'},
-    'super': {'amount': 500, 'credits': 5800, 'name': '高级充值'},
+    'small': {'amount': 10, 'credits': 1000, 'name': '尝鲜包'},  # 10元 = 1000积分
+    'medium': {'amount': 49, 'credits': 4900, 'name': '标准包'},  # 49元 = 4900积分
+    'large': {'amount': 99, 'credits': 9900, 'name': '旗舰包'},  # 99元 = 9900积分
+    'super': {'amount': 499, 'credits': 49900, 'name': '企业包'},  # 499元 = 49900积分
 }
 
 @app.post("/api/wechat/create-order")
@@ -3079,6 +3181,235 @@ async def query_wechat_order(order_no: str):
         'status': result['trade_state'],  # SUCCESS/NOTPAY/CLOSED/...
         'paid': result['trade_state'] == 'SUCCESS'
     }
+
+
+# ======================
+# 管理员 API
+# ======================
+
+@app.get("/api/admin/users")
+async def get_admin_users(db: Session = Depends(get_db)):
+    """
+    管理员：获取所有用户列表（包括付费数据）
+    """
+    try:
+        users = db.query(User).order_by(User.created_at.desc()).all()
+        
+        user_list = []
+        for user in users:
+            # 统计充值总额（amount > 0）
+            recharge_records = db.query(CreditHistory).filter(
+                CreditHistory.user_id == user.id,
+                CreditHistory.amount > 0,
+                CreditHistory.action.in_(['recharge', '管理员调整积分'])
+            ).all()
+            total_recharge = sum(record.amount for record in recharge_records)
+            recharge_count = len([r for r in recharge_records if r.action == 'recharge'])
+            
+            # 统计消费总额（amount < 0）
+            consume_records = db.query(CreditHistory).filter(
+                CreditHistory.user_id == user.id,
+                CreditHistory.amount < 0
+            ).all()
+            total_consume = abs(sum(record.amount for record in consume_records))
+            
+            user_list.append({
+                "id": user.id,
+                "email": user.email,
+                "credits": user.credits,
+                "role": user.role,
+                "createdAt": user.created_at.timestamp() * 1000 if user.created_at else None,
+                "totalRecharge": total_recharge,  # 积分总充值
+                "rechargeCount": recharge_count,  # 充值次数
+                "totalConsume": total_consume,    # 积分总消费
+            })
+        
+        return {"users": user_list}
+    except Exception as e:
+        print(f"获取用户列表失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/admin/prompts")
+async def get_admin_prompts(
+    page: int = 1,
+    page_size: int = 50,
+    db: Session = Depends(get_db)
+):
+    """
+    管理员：获取所有提示词（分页）
+    """
+    try:
+        # 总数
+        total = db.query(SavedPrompt).count()
+        
+        # 分页查询
+        offset = (page - 1) * page_size
+        prompts = db.query(SavedPrompt).order_by(
+            SavedPrompt.created_at.desc()
+        ).offset(offset).limit(page_size).all()
+        
+        prompt_list = []
+        for prompt in prompts:
+            # 获取用户邮箱
+            user = db.query(User).filter(User.id == prompt.user_id).first()
+            prompt_list.append({
+                "id": prompt.id,
+                "userId": prompt.user_id,
+                "userEmail": user.email if user else '未知',
+                "productName": prompt.product_name or '未命名',
+                "content": prompt.content,
+                "createdAt": prompt.created_at.timestamp() * 1000 if prompt.created_at else None,
+            })
+        
+        return {
+            "prompts": prompt_list,
+            "total": total,
+            "page": page,
+            "page_size": page_size
+        }
+    except Exception as e:
+        print(f"获取提示词列表失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/admin/stats")
+async def get_admin_stats(db: Session = Depends(get_db)):
+    """
+    管理员：获取统计数据
+    """
+    try:
+        # 总用户数
+        total_users = db.query(User).count()
+        
+        # 总视频数
+        total_videos = db.query(Video).count()
+        
+        # 公开视频数
+        public_videos = db.query(Video).filter(Video.is_public == True).count()
+        
+        # 总消费积分
+        consume_records = db.query(CreditHistory).filter(CreditHistory.amount < 0).all()
+        total_credits_used = abs(sum(record.amount for record in consume_records))
+        
+        # 总充值金额（积分）
+        recharge_records = db.query(CreditHistory).filter(
+            CreditHistory.amount > 0,
+            CreditHistory.action == 'recharge'
+        ).all()
+        total_recharge = sum(record.amount for record in recharge_records)
+        
+        return {
+            "totalUsers": total_users,
+            "totalVideos": total_videos,
+            "publicVideos": public_videos,
+            "totalCreditsUsed": total_credits_used,
+            "totalRecharge": total_recharge
+        }
+    except Exception as e:
+        print(f"获取统计数据失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/admin/videos")
+async def get_admin_videos(db: Session = Depends(get_db)):
+    """
+    管理员：获取所有视频列表
+    """
+    try:
+        videos = db.query(Video).order_by(Video.created_at.desc()).all()
+        
+        video_list = []
+        for video in videos:
+            user = db.query(User).filter(User.id == video.user_id).first()
+            video_list.append({
+                "id": video.id,
+                "userId": video.user_id,
+                "userEmail": user.email if user else '未知',
+                "title": video.product_name or '未命名视频',
+                "thumbnail": video.thumbnail_url or '',
+                "videoUrl": video.video_url,
+                "script": video.script,
+                "createdAt": video.created_at.timestamp() * 1000 if video.created_at else None,
+                "isPublic": video.is_public or False,
+            })
+        
+        return {"videos": video_list}
+    except Exception as e:
+        print(f"获取视频列表失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/admin/video/{video_id}/public")
+async def toggle_video_public(
+    video_id: str,
+    request: dict,
+    db: Session = Depends(get_db)
+):
+    """
+    管理员：切换视频公开状态
+    """
+    try:
+        video = db.query(Video).filter(Video.id == video_id).first()
+        if not video:
+            raise HTTPException(status_code=404, detail="视频不存在")
+        
+        video.is_public = request.get('isPublic', False)
+        db.commit()
+        
+        return {"success": True}
+    except Exception as e:
+        db.rollback()
+        print(f"切换视频公开状态失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/admin/video/{video_id}")
+async def delete_video_admin(video_id: str, db: Session = Depends(get_db)):
+    """
+    管理员：删除视频
+    """
+    try:
+        video = db.query(Video).filter(Video.id == video_id).first()
+        if not video:
+            raise HTTPException(status_code=404, detail="视频不存在")
+        
+        db.delete(video)
+        db.commit()
+        return {"success": True}
+    except Exception as e:
+        db.rollback()
+        print(f"删除视频失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+class UpdateCreditsRequest(BaseModel):
+    credits: int
+
+@app.put("/api/admin/user/{user_id}/credits")
+async def update_user_credits(user_id: str, req: UpdateCreditsRequest, db: Session = Depends(get_db)):
+    """
+    管理员：调整用户积分
+    """
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="用户不存在")
+        
+        old_credits = user.credits
+        user.credits = req.credits
+        
+        # 记录积分变动
+        credit_history = CreditHistory(
+            id=str(uuid.uuid4()),
+            user_id=user_id,
+            action="管理员调整积分",
+            amount=req.credits - old_credits,
+            balance_after=req.credits,
+            description=f"管理员将积分从 {old_credits} 调整为 {req.credits}"
+        )
+        db.add(credit_history)
+        db.commit()
+        
+        return {"success": True}
+    except Exception as e:
+        db.rollback()
+        print(f"更新用户积分失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ======================

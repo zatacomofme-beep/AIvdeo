@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { X, User, Mail, CreditCard, History, Settings, LogOut, Edit2, Check } from 'lucide-react';
 import { useStore } from '../lib/store';
 import { cn } from '../lib/utils';
@@ -33,10 +34,28 @@ export function UserCenter({ isOpen, onClose, onLogout }: UserCenterProps) {
   // 获取用户统计数据
   useEffect(() => {
     if (isOpen && user) {
+      fetchUserInfo();      // 新增：先刷新用户信息（包括积分）
       fetchUserStats();
       fetchCreditsHistory();  // 新增：加载积分历史
     }
   }, [isOpen, user]);
+
+  // 新增：刷新用户信息（包括积分）
+  const fetchUserInfo = async () => {
+    if (!user) return;
+    
+    try {
+      const data = await api.getUserInfo(user.id);
+      if (data && data.credits !== undefined) {
+        // 更新 store 中的积分
+        const { setCredits } = useStore.getState();
+        setCredits(data.credits);
+        console.log('✅ 用户积分已刷新:', data.credits);
+      }
+    } catch (error) {
+      console.error('刷新用户信息失败:', error);
+    }
+  };
 
   const fetchUserStats = async () => {
     if (!user) return;
@@ -120,26 +139,10 @@ export function UserCenter({ isOpen, onClose, onLogout }: UserCenterProps) {
     { id: 'history', label: '使用记录', icon: History },
   ];
 
-  const handleSaveProfile = async () => {
-    if (!user) return;
-    
-    try {
-      // 调用API更新用户信息
-      await api.updateUser(user.id, {
-        username: editedUsername
-      });
-      
-      // 更新本地状态
-      useStore.setState({
-        user: { ...user, username: editedUsername }
-      });
-      
-      setIsEditing(false);
-      alert('✅ 用户名保存成功！');
-    } catch (error) {
-      console.error('保存用户信息失败:', error);
-      alert('❌ 保存失败，请重试');
-    }
+  const handleSaveProfile = () => {
+    // TODO: 调用API更新用户信息
+    console.log('保存用户信息:', editedUsername);
+    setIsEditing(false);
   };
 
   if (!isOpen || !user) return null;

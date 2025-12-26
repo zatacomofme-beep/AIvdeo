@@ -2,13 +2,12 @@ import { useState, useEffect } from 'react';
 import { Users, Plus, Trash2, Clock, Edit, X, Wand2, Loader2 } from 'lucide-react';
 import { useStore } from '../../lib/store';
 import { cn } from '../../lib/utils';
+import { showToast } from '../../lib/toast-utils';  // ✅ 导入 toast 工具
 const API_BASE_URL = 'https://semopic.com';
 
 export function MyCharacters() {
   const { myCharacters, addCharacter, deleteCharacter, user, isLoggedIn, loadUserData } = useStore();  // 添加 loadUserData
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);  // 新增：编辑模态框
-  const [editingCharacter, setEditingCharacter] = useState<any>(null);  // 新增：正在编辑的角色
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [formData, setFormData] = useState({
     country: '', // 国家
@@ -99,106 +98,6 @@ export function MyCharacters() {
     }
   };
 
-  // 新增：打开编辑模态框
-  const handleEditCharacter = (character: any) => {
-    setEditingCharacter(character);
-    setFormData({
-      country: '',  // 编辑时不需要国家和人种
-      ethnicity: '',
-      name: character.name,
-      description: character.description,
-      age: character.age?.toString() || '',
-      gender: character.gender || '',
-      style: character.style || '',
-      tags: character.tags?.join(', ') || ''
-    });
-    setShowEditModal(true);
-  };
-
-  // 新增：更新角色
-  const handleUpdateCharacter = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.name || !formData.description) {
-      alert('请填写角色名称和描述');
-      return;
-    }
-
-    const currentUser = useStore.getState().user;
-    if (!currentUser) {
-      alert('请先登录！');
-      return;
-    }
-
-    setIsGeneratingAI(true);
-    
-    try {
-      // 调用后端API更新角色
-      const response = await fetch(`${API_BASE_URL}/api/update-character`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          character_id: editingCharacter.characterId || editingCharacter.id,
-          user_id: currentUser.id,
-          name: formData.name,
-          description: formData.description,
-          age: formData.age ? parseInt(formData.age) : undefined,
-          gender: formData.gender || undefined,
-          style: formData.style || undefined,
-          tags: formData.tags ? formData.tags.split(',').map(t => t.trim()).filter(Boolean) : []
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ detail: '更新失败' }));
-        throw new Error(errorData.detail || '更新角色失败');
-      }
-
-      // 更新本地store
-      const updatedCharacters = myCharacters.map(char => 
-        char.id === editingCharacter.id ? {
-          ...char,
-          name: formData.name,
-          description: formData.description,
-          age: formData.age ? parseInt(formData.age) : undefined,
-          gender: formData.gender || undefined,
-          style: formData.style || undefined,
-          tags: formData.tags ? formData.tags.split(',').map(t => t.trim()).filter(Boolean) : []
-        } : char
-      );
-      
-      // 手动更新store（需要在store中添加updateCharacter方法，或直接操作）
-      useStore.setState({ myCharacters: updatedCharacters });
-
-      setShowEditModal(false);
-      setEditingCharacter(null);
-      setFormData({
-        country: '',
-        ethnicity: '',
-        name: '',
-        description: '',
-        age: '',
-        gender: '',
-        style: '',
-        tags: ''
-      });
-      
-      alert('✅ 角色更新成功！');
-      
-      // 重新加载数据
-      if (currentUser?.id) {
-        loadUserData(currentUser.id);
-      }
-      
-    } catch (error) {
-      console.error('更新角色失败:', error);
-      alert(`❌ 更新角色失败\n\n${error instanceof Error ? error.message : '请稍后重试'}`);
-    } finally {
-      setIsGeneratingAI(false);
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.description) {
@@ -274,8 +173,8 @@ export function MyCharacters() {
       });
       setShowCreateModal(false);
       
-      // 显示成功提示
-      alert(`✅ 角色创建成功！\n\n角色ID: ${result.character_id}\n用户ID: ${currentUserId}`);
+      // ✅ 使用 toast 替代 alert
+      showToast.success('角色创建成功', `角色ID: ${result.character_id}\n用户ID: ${currentUserId}`);
       
     } catch (error) {
       console.error('创建角色失败:', error);
@@ -334,23 +233,14 @@ export function MyCharacters() {
                         {character.name.charAt(0).toUpperCase()}
                       </span>
                     </div>
-                    {/* 编辑和删除按钮 */}
-                    <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-all">
-                      <button 
-                        onClick={() => handleEditCharacter(character)}
-                        className="p-1.5 bg-white/90 backdrop-blur-md text-tech hover:text-tech-hover rounded-lg hover:bg-white transition-all shadow-sm"
-                        title="编辑角色"
-                      >
-                        <Edit size={14} />
-                      </button>
-                      <button 
-                        onClick={() => deleteCharacter(character.id)}
-                        className="p-1.5 bg-white/90 backdrop-blur-md text-red-500 hover:text-red-600 rounded-lg hover:bg-white transition-all shadow-sm"
-                        title="删除角色"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
+                    {/* 删除按钮 */}
+                    <button 
+                      onClick={() => deleteCharacter(character.id)}
+                      className="opacity-0 group-hover:opacity-100 p-1.5 bg-white/90 backdrop-blur-md text-red-500 hover:text-red-600 rounded-lg hover:bg-white transition-all shadow-sm"
+                      title="删除角色"
+                    >
+                      <Trash2 size={14} />
+                    </button>
                   </div>
                   
                   {/* 角色名称 */}
@@ -684,147 +574,6 @@ export function MyCharacters() {
                   创建角色
                 </button>
               </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Character Modal - 新增编辑模态框 */}
-      {showEditModal && editingCharacter && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-in fade-in duration-300">
-          <div className="w-[700px] max-h-[90vh] bg-white flex flex-col rounded-lg overflow-hidden shadow-tech-lg">
-            {/* Header */}
-            <div className="h-20 flex items-center justify-between px-8 border-b border-slate-200 shrink-0 bg-white">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-tech rounded-md flex items-center justify-center shadow-tech-sm text-white">
-                  <Edit size={24} />
-                </div>
-                <div>
-                  <h2 className="font-bold text-xl text-slate-800">编辑角色</h2>
-                  <p className="text-xs text-slate-500 mt-1">修改角色信息</p>
-                </div>
-              </div>
-              <button
-                onClick={() => {
-                  setShowEditModal(false);
-                  setEditingCharacter(null);
-                }}
-                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-md transition-all"
-              >
-                <X size={24} />
-              </button>
-            </div>
-
-            {/* Content */}
-            <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
-              <form onSubmit={handleUpdateCharacter} className="space-y-6">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    角色名称 <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="例如：李小明"
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    角色描述 <span className="text-red-500">*</span>
-                  </label>
-                  <textarea
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    placeholder="描述角色的背景、性格、特征等..."
-                    rows={4}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-tech focus:border-transparent transition-all resize-none"
-                    required
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      性别
-                    </label>
-                    <select
-                      value={formData.gender}
-                      onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
-                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-tech focus:border-transparent transition-all"
-                    >
-                      <option value="">请选择</option>
-                      <option value="男">男</option>
-                      <option value="女">女</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      年龄
-                    </label>
-                    <input
-                      type="number"
-                      value={formData.age}
-                      onChange={(e) => setFormData({ ...formData, age: e.target.value })}
-                      placeholder="例如：25"
-                      min="18"
-                      max="80"
-                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-tech focus:border-transparent transition-all"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    风格/类型
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.style}
-                    onChange={(e) => setFormData({ ...formData, style: e.target.value })}
-                    placeholder="例如：写实、卡通、赛博朋克"
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    标签（用逗号分隔）
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.tags}
-                    onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
-                    placeholder="例如：年轻, 活力, 科技"
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-                  />
-                  <p className="text-xs text-slate-500 mt-1">使用中文或英文逗号分隔多个标签</p>
-                </div>
-
-                <div className="flex gap-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowEditModal(false);
-                      setEditingCharacter(null);
-                    }}
-                    className="flex-1 px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors font-medium"
-                  >
-                    取消
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isGeneratingAI}
-                    className="flex-1 btn-tech-ai px-6 py-3 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isGeneratingAI ? '更新中...' : '保存修改'}
-                  </button>
-                </div>
               </form>
             </div>
           </div>

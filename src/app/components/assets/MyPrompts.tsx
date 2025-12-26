@@ -1,14 +1,12 @@
 import React, { useState } from 'react';
-import { MessageSquare, Copy, Trash2, Clock, Sparkles, X, Eye, Edit, Save } from 'lucide-react';
+import { MessageSquare, Copy, Trash2, Clock, Sparkles, X, Eye } from 'lucide-react';
 import { useStore } from '../../lib/store';
 import { cn } from '../../lib/utils';
 import { toast } from 'sonner';
 
 export function MyPrompts() {
-  const { myPrompts, deletePrompt, updatePrompt } = useStore();  // 添加 updatePrompt
+  const { myPrompts, deletePrompt } = useStore();
   const [selectedPrompt, setSelectedPrompt] = useState<any>(null);
-  const [editingPrompt, setEditingPrompt] = useState<any>(null);  // 新增：编辑状态
-  const [editContent, setEditContent] = useState('');  // 新增：编辑内容
 
   const formatDate = (timestamp: number) => {
     return new Date(timestamp).toLocaleString('zh-CN', {
@@ -22,34 +20,6 @@ export function MyPrompts() {
   const handleCopy = (content: string) => {
     navigator.clipboard.writeText(content);
     toast.success('提示词已复制到剪贴板');
-  };
-
-  // 新增：打开编辑模态框
-  const handleEdit = (prompt: any) => {
-    setEditingPrompt(prompt);
-    setEditContent(prompt.content);
-    setSelectedPrompt(null);  // 关闭详情模态框
-  };
-
-  // 新增：保存编辑
-  const handleSaveEdit = () => {
-    if (!editContent.trim()) {
-      toast.error('提示词内容不能为空');
-      return;
-    }
-
-    // 使用store的updatePrompt方法
-    updatePrompt(editingPrompt.id, editContent);
-    
-    toast.success('提示词已更新');
-    setEditingPrompt(null);
-    setEditContent('');
-  };
-
-  // 新增：取消编辑
-  const handleCancelEdit = () => {
-    setEditingPrompt(null);
-    setEditContent('');
   };
 
   return (
@@ -93,16 +63,6 @@ export function MyPrompts() {
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleEdit(prompt);
-                      }}
-                      className="p-1.5 text-slate-400 hover:text-yellow-600 hover:bg-yellow-50 rounded-md transition-colors"
-                      title="编辑"
-                    >
-                      <Edit size={16} />
-                    </button>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -201,13 +161,6 @@ export function MyPrompts() {
               </div>
               <div className="flex items-center gap-3">
                 <button
-                  onClick={() => handleEdit(selectedPrompt)}
-                  className="px-6 py-2.5 bg-yellow-500 hover:bg-yellow-600 text-white rounded-md transition-all flex items-center gap-2"
-                >
-                  <Edit size={16} />
-                  编辑提示词
-                </button>
-                <button
                   onClick={() => handleCopy(selectedPrompt.content)}
                   className="btn-tech-ai px-6 py-2.5 flex items-center gap-2"
                 >
@@ -219,78 +172,6 @@ export function MyPrompts() {
                   className="px-6 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md transition-all"
                 >
                   关闭
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 编辑模态框 - 新增 */}
-      {editingPrompt && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="w-[900px] max-h-[90vh] tech-card flex flex-col overflow-hidden bg-white">
-            {/* Header */}
-            <div className="h-16 flex items-center justify-between px-6 border-b border-slate-200 shrink-0 bg-white">
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 bg-yellow-500 rounded-md flex items-center justify-center shadow-md text-white">
-                  <Edit size={24} />
-                </div>
-                <div>
-                  <h2 className="font-semibold text-lg text-slate-900">
-                    编辑提示词
-                  </h2>
-                  <p className="text-xs text-slate-500 mt-1">
-                    {editingPrompt.productName || '未命名项目'}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={handleCancelEdit}
-                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-md transition-all"
-              >
-                <X size={24} />
-              </button>
-            </div>
-
-            {/* Content */}
-            <div className="flex-1 overflow-y-auto p-6 custom-scrollbar bg-slate-50">
-              <div className="bg-white rounded-md border border-slate-200 overflow-hidden">
-                <div className="p-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-                  <span className="text-xs text-slate-600 font-medium">提示词内容</span>
-                  <span className="text-xs text-slate-500">
-                    字数：{editContent.length}
-                  </span>
-                </div>
-                <textarea
-                  value={editContent}
-                  onChange={(e) => setEditContent(e.target.value)}
-                  className="w-full p-6 text-slate-700 text-sm font-mono leading-relaxed resize-none focus:outline-none min-h-[400px] bg-white"
-                  placeholder="请输入提示词内容..."
-                  style={{ fontFamily: 'Consolas, Monaco, "Courier New", monospace' }}
-                />
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="h-16 flex items-center justify-between px-6 border-t border-slate-200 shrink-0 bg-white">
-              <div className="text-sm text-slate-500 flex items-center gap-2">
-                <Clock size={14} />
-                创建于 {formatDate(editingPrompt.createdAt)}
-              </div>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={handleCancelEdit}
-                  className="px-6 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md transition-all"
-                >
-                  取消
-                </button>
-                <button
-                  onClick={handleSaveEdit}
-                  className="px-6 py-2.5 bg-yellow-500 hover:bg-yellow-600 text-white rounded-md transition-all flex items-center gap-2 shadow-md"
-                >
-                  <Save size={16} />
-                  保存修改
                 </button>
               </div>
             </div>

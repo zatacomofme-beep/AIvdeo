@@ -1,11 +1,11 @@
 import React from 'react';
 import { useEffect } from 'react';
-import { Package, Trash2, Clock, Tag, ShoppingBag, Plus, Edit } from 'lucide-react';
+import { Package, Trash2, Clock, Tag, ShoppingBag, Plus } from 'lucide-react';
 import { useStore } from '../../lib/store';
 import { cn } from '../../lib/utils';
 
 export function MyProducts() {
-  const { savedProducts, deleteProduct, loadProduct, setShowDirector, setCurrentStep, setShowCreateProduct, user, loadUserData, setCurrentProduct, setUploadedImages } = useStore();
+  const { savedProducts, deleteProduct, loadProduct, setShowDirector, setCurrentStep, setShowCreateProduct, user, loadUserData } = useStore();
 
   // ✅ 组件初始化时从数据库加载数据
   useEffect(() => {
@@ -28,15 +28,6 @@ export function MyProducts() {
     loadProduct(productId);
     setShowDirector(true);
     setCurrentStep(1);
-  };
-
-  const handleEditProduct = (product: typeof savedProducts[0]) => {
-    // 设置当前编辑的商品
-    setCurrentProduct(product);
-    // 设置图片
-    setUploadedImages(product.imageUrls);
-    // 打开创建商品面板（将自动识别为编辑模式）
-    setShowCreateProduct(true);
   };
 
   const getCategoryLabel = (category: string) => {
@@ -114,14 +105,7 @@ export function MyProducts() {
                     {getCategoryLabel(product.category)}
                   </div>
 
-                  <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button 
-                      onClick={() => handleEditProduct(product)}
-                      className="p-1.5 bg-white/90 backdrop-blur-sm text-blue-500 hover:text-blue-600 rounded-md hover:bg-white transition-colors"
-                      title="编辑商品"
-                    >
-                      <Edit size={14} />
-                    </button>
+                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button 
                       onClick={() => deleteProduct(product.id)}
                       className="p-1.5 bg-white/90 backdrop-blur-sm text-red-500 hover:text-red-600 rounded-md hover:bg-white transition-colors"

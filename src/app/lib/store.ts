@@ -358,16 +358,67 @@ export const useStore = create<AppStore>()(persist((set) => ({
     }
   },
   
-  updateVideoStatus: (videoId, updates) => set((state) => ({
-    myVideos: state.myVideos.map(video => 
-      video.id === videoId ? { ...video, ...updates } : video
-    )
-  })),
+  updateVideoStatus: async (videoId, updates) => {
+    const state = useStore.getState();
+    
+    // ✅ 检查videoId是否为UUID格式（数据库中的视频）
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(videoId);
+    
+    if (isUUID && state.user?.id) {
+      // 是数据库中的视频，需要同步到数据库
+      try {
+        const { api } = await import('../../lib/api');
+        
+        // 调用后端API更新视频
+        await api.updateVideo(videoId, {
+          video_url: updates.url,
+          thumbnail_url: updates.thumbnail,
+          status: updates.status,
+          progress: updates.progress,
+          script: updates.script,
+          product_name: updates.productName
+        });
+        
+        console.log(`✅ 视频${videoId}状态已同步到数据库`);
+        
+        // 更新本地状态
+        set((state) => ({
+          myVideos: state.myVideos.map(video => 
+            video.id === videoId ? { ...video, ...updates } : video
+          )
+        }));
+      } catch (error) {
+        console.error(`更新视频${videoId}失败:`, error);
+        // 即使后端失败，也更新本地状态
+        set((state) => ({
+          myVideos: state.myVideos.map(video => 
+            video.id === videoId ? { ...video, ...updates } : video
+          )
+        }));
+      }
+    } else {
+      // 本地ID（时间戳），只更新本地状态
+      console.warn(`[updateVideoStatus] 视频${videoId}不在数据库中，只更新本地状态`);
+      set((state) => ({
+        myVideos: state.myVideos.map(video => 
+          video.id === videoId ? { ...video, ...updates } : video
+        )
+      }));
+    }
+  },
   
   toggleVideoPublic: async (videoId, isPublic) => {
     const state = useStore.getState();
     if (!state.user?.id) {
       alert('请先登录');
+      return;
+    }
+    
+    // ✅ 检查videoId是否为UUID格式（数据库中的视频）
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(videoId);
+    if (!isUUID) {
+      console.warn(`[toggleVideoPublic] 视频${videoId}不在数据库中（本地ID）`);
+      alert('⚠️ 该视频未成功保存到数据库，无法开放到内容广场。\n\n建议：重新生成视频');
       return;
     }
     
@@ -474,6 +525,20 @@ export const useStore = create<AppStore>()(persist((set) => ({
     console.log('[Store] 用户ID:', userId);
     try {
       const { api } = await import('../../lib/api');
+      
+      // ✅ 重要：先加载用户积分
+      console.log('[Store] 加载用户积分...');
+      const balanceResponse = await api.getCreditsBalance(userId);
+      if (balanceResponse && balanceResponse.credits !== undefined) {
+        console.log('[Store] ✅ 积分数据:', balanceResponse.credits);
+        // 更新积分（同时更新 user.credits 和 store.credits）
+        set((state) => ({
+          credits: balanceResponse.credits,
+          user: state.user ? { ...state.user, credits: balanceResponse.credits } : null
+        }));
+      } else {
+        console.warn('[Store] ⚠️ 积分API返回null');
+      }
       
       console.log('[Store] 正在并行加载角色、商品、提示词和视频...');
       // 并行加载所有数据

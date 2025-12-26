@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Users, Plus, X, Wand2, Loader2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useStore, Character } from '../lib/store';
+import { showToast } from '../lib/toast-utils';  // ✅ 导入 toast 工具
 const API_BASE_URL = 'https://semopic.com';
 
 interface CharacterSelectorProps {
@@ -27,7 +28,7 @@ export function CharacterSelector({ onSelectCharacter, selectedCharacter }: Char
   const handleAIGenerate = async () => {
     // 检查是否填写了4个必须参数
     if (!formData.country || !formData.ethnicity || !formData.age || !formData.gender) {
-      alert('请先填写国家、人种、年龄和性别！');
+      showToast.warning('缺少必填项', '请先填写国家、人种、年龄和性别！');
       return;
     }
 
@@ -79,7 +80,7 @@ export function CharacterSelector({ onSelectCharacter, selectedCharacter }: Char
       console.log('✅ AI生成成功，表单数据已更新');
     } catch (error) {
       console.error('AI生成角色失败:', error);
-      alert('❌ AI生成失败，请稍后重试');
+      showToast.error('AI生成失败', '请稍后重试');
     } finally {
       setIsGeneratingAI(false);
     }
@@ -103,12 +104,12 @@ export function CharacterSelector({ onSelectCharacter, selectedCharacter }: Char
     // ✅ 修复：在开始加载前先检查登录状态
     if (!currentUser?.id) {
       console.error('[CharacterSelector] 未登录！currentUser:', currentUser);
-      alert('请先登录后再创建角色！');
+      showToast.warning('请先登录', '请先登录后再创建角色！');
       return;
     }
     
     if (!formData.name || !formData.description) {
-      alert('请填写角色名称和描述');
+      showToast.warning('缺少必填项', '请填写角色名称和描述');
       return;
     }
 
@@ -183,7 +184,7 @@ export function CharacterSelector({ onSelectCharacter, selectedCharacter }: Char
       
     } catch (error) {
       console.error('创建角色失败:', error);
-      alert(`❌ 创建角色失败\n\n${error instanceof Error ? error.message : '请稍后重试'}`);
+      showToast.error('创建角色失败', error instanceof Error ? error.message : '请稍后重试');
     } finally {
       setIsGeneratingAI(false);
     }
@@ -226,13 +227,13 @@ export function CharacterSelector({ onSelectCharacter, selectedCharacter }: Char
             </button>
           </div>
 
-          <div className="grid grid-cols-3 gap-3 max-h-[380px] overflow-y-auto custom-scrollbar pr-2">
+          <div className="grid grid-cols-2 gap-4 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
             {myCharacters.map((character) => (
               <button
                 key={character.id}
                 onClick={() => onSelectCharacter(character)}
                 className={cn(
-                  "relative bg-white border-2 rounded-lg overflow-hidden transition-all duration-300 text-left group p-3",
+                  "relative bg-white border-2 rounded-lg overflow-hidden transition-all duration-300 text-left group p-4",
                   selectedCharacter?.id === character.id
                     ? "border-tech shadow-tech-md scale-[1.02]"
                     : "border-slate-200 hover:border-tech/50 hover:shadow-sm"
@@ -240,31 +241,31 @@ export function CharacterSelector({ onSelectCharacter, selectedCharacter }: Char
               >
                 {/* 选中标记 */}
                 {selectedCharacter?.id === character.id && (
-                  <div className="absolute top-2 right-2 w-5 h-5 bg-tech rounded-full flex items-center justify-center shadow-sm">
-                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="absolute top-3 right-3 w-6 h-6 bg-tech rounded-full flex items-center justify-center">
+                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                     </svg>
                   </div>
                 )}
 
                 {/* 角色信息 */}
-                <div className="space-y-1.5">
-                  <h4 className="font-bold text-sm text-slate-800 pr-6 truncate">{character.name}</h4>
-                  <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed min-h-[2rem]">{character.description}</p>
+                <div className="space-y-2">
+                  <h4 className="font-bold text-base text-slate-800 pr-8">{character.name}</h4>
+                  <p className="text-sm text-slate-600 line-clamp-3 leading-relaxed">{character.description}</p>
                   
-                  <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                  <div className="flex items-center gap-2 pt-2">
                     {character.gender && (
-                      <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-700 rounded">
+                      <span className="text-xs px-2 py-1 bg-slate-100 text-slate-700 rounded">
                         {character.gender}
                       </span>
                     )}
                     {character.age && (
-                      <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-700 rounded">
+                      <span className="text-xs px-2 py-1 bg-slate-100 text-slate-700 rounded">
                         {character.age}岁
                       </span>
                     )}
                     {character.style && (
-                      <span className="text-[10px] px-1.5 py-0.5 bg-sky-50 text-tech rounded">
+                      <span className="text-xs px-2 py-1 bg-sky-50 text-tech rounded">
                         {character.style}
                       </span>
                     )}
@@ -272,11 +273,11 @@ export function CharacterSelector({ onSelectCharacter, selectedCharacter }: Char
 
                   {/* 标签 */}
                   {character.tags && character.tags.length > 0 && (
-                    <div className="flex flex-wrap gap-1 pt-0.5">
-                      {character.tags.slice(0, 2).map((tag, index) => (
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {character.tags.map((tag, index) => (
                         <span 
                           key={index}
-                          className="text-[10px] px-1.5 py-0.5 bg-white border border-slate-200 text-slate-600 rounded-full"
+                          className="text-[11px] px-2 py-0.5 bg-white border border-slate-200 text-slate-600 rounded-full"
                         >
                           {tag}
                         </span>

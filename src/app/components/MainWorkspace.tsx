@@ -3,6 +3,7 @@ import { Sparkles, ShoppingBag, Video, Package } from 'lucide-react';
 import { useStore } from '../lib/store';
 import { CreateProductPanel } from './CreateProductPanel';
 import { cn } from '../lib/utils';
+import { showToast } from '../lib/toast-utils';  // ✅ 导入 toast 工具
 
 export function MainWorkspace() {
   const { 
@@ -49,7 +50,7 @@ export function MainWorkspace() {
             <button
               onClick={() => {
                 if (savedProducts.length === 0) {
-                  alert('请先创建商品！\n\n点击左侧“创建商品”开始，或前往“我的商品”页面。');
+                  showToast.info('请先创建商品', '点击左侧“创建商品”开始，或前往“我的商品”页面。');
                   return;
                 }
                 setShowDirector(true);

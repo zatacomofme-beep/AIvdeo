@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
+import { useState } from 'react';
 import { X, Zap, Check, CreditCard, Smartphone } from 'lucide-react';
+import { useStore } from '../lib/store';
 import { cn } from '../lib/utils';
 import { QRCodeSVG } from 'qrcode.react';
+import { showToast } from '../lib/toast-utils';  // ✅ 导入 toast 工具
 
 interface RechargeModalProps {
   isOpen: boolean;
@@ -10,6 +13,7 @@ interface RechargeModalProps {
 }
 
 export function RechargeModal({ isOpen, onClose, onRecharge }: RechargeModalProps) {
+  const { user } = useStore();  // 获取当前登录用户
   const [selectedPackage, setSelectedPackage] = useState<number | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<'alipay' | 'wechat'>('wechat');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -80,7 +84,14 @@ export function RechargeModal({ isOpen, onClose, onRecharge }: RechargeModalProp
 
   const handleRecharge = async () => {
     if (!selectedPkg) {
-      alert('请选择充值套餐');
+      showToast.warning('请选择套餐', '请选择充值套餐');
+      return;
+    }
+
+    // 检查用户是否登录
+    if (!user || !user.id) {
+      showToast.warning('请先登录', '请先登录后再充值');
+      onClose();
       return;
     }
 
@@ -95,7 +106,7 @@ export function RechargeModal({ isOpen, onClose, onRecharge }: RechargeModalProp
         },
         body: JSON.stringify({
           package_id: ['small', 'medium', 'large', 'super'][selectedPkg.id - 1],
-          user_id: localStorage.getItem('user_id') || 'guest',
+          user_id: user.id,  // 使用真实的用户ID
         }),
       });
 
@@ -109,9 +120,9 @@ export function RechargeModal({ isOpen, onClose, onRecharge }: RechargeModalProp
           amount: result.amount,
           credits: result.credits
         });
-        setIsProcessing(false); // 二维码显示后，停止“处理中”状态
+        setIsProcessing(false);
         
-        // 等待 1 秒后开始轮询（给用户时间扫码）
+        // 等待 1 秒后开始轮询
         setTimeout(() => {
           console.log('开始轮询支付状态...');
           
@@ -123,22 +134,39 @@ export function RechargeModal({ isOpen, onClose, onRecharge }: RechargeModalProp
               
               if (statusResult.success && statusResult.paid) {
                 console.log('支付成功！');
-                stopPolling();
+                
+                // ✅ 关键修复：立即清除轮询
+                clearInterval(pollInterval);
+                setPollIntervalId(null);
                 setQrCodeData(null);
-                onClose();
                 
-                // 重要：不在前端增加积分，只显示成功消息
-                // 积分已经在后端回调中增加，前端需要刷新用户信息
                 const totalCredits = selectedPkg.credits + selectedPkg.bonus;
-                alert(`✅ 充值成功！\n获得 ${totalCredits} 积分\n\n请刷新页面查看最新积分`);
                 
-                // 刷新页面以更新积分显示
-                window.location.reload();
+                // 使用 useStore 的 loadUserData 重新加载用户数据
+                import('../lib/store').then(({ useStore }) => {
+                  const { loadUserData } = useStore.getState();
+                  loadUserData(user.id).then(() => {
+                    console.log('✅ 用户数据已重新加载');
+                    showToast.success('充值成功', `获得 ${totalCredits} 积分`);
+                    onClose();
+                  }).catch(err => {
+                    console.error('加载用户数据失败:', err);
+                    showToast.success('充值成功', `获得 ${totalCredits} 积分\n\n请刷新页面查看最新积分`);
+                    onClose();
+                  });
+                }).catch(err => {
+                  console.error('导入store失败:', err);
+                  showToast.success('充值成功', `获得 ${totalCredits} 积分\n\n请刷新页面查看最新积分`);
+                  window.location.reload();
+                });
+                
+                // ✅ 重要：立即return，防止后续代码执行
+                return;
               }
             } catch (error) {
               console.error('查询支付状态失败:', error);
             }
-          }, 5000); // 每 5 秒查询一次
+          }, 5000);
           
           setPollIntervalId(pollInterval);
           
@@ -147,7 +175,7 @@ export function RechargeModal({ isOpen, onClose, onRecharge }: RechargeModalProp
             console.log('支付超时，停止轮询');
             stopPolling();
             if (qrCodeData) {
-              alert('支付超时，请重新尝试');
+              showToast.warning('支付超时', '请重新尝试');
               closeQrCode();
             }
           }, 300000);
@@ -157,7 +185,7 @@ export function RechargeModal({ isOpen, onClose, onRecharge }: RechargeModalProp
       }
     } catch (error) {
       console.error('充值失败:', error);
-      alert(`充值失败：${error}`);
+      showToast.error('充值失败', String(error));
       setIsProcessing(false);
     }
   };

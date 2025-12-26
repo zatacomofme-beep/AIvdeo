@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { 
   Shield, Users, Video, MessageSquare, DollarSign, 
   Check, X, Eye, Trash2, Search, Filter, Crown,
-  Loader2, TrendingUp, UserPlus, LogOut
+  Loader2, TrendingUp, UserPlus, LogOut, ChevronLeft, ChevronRight
 } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { cn } from '../lib/utils';
 
 const API_BASE_URL = 'https://semopic.com';
@@ -14,6 +15,9 @@ interface User {
   credits: number;
   createdAt: number;
   role: 'user' | 'admin';
+  totalRecharge?: number;  // 新增：总充值金额
+  rechargeCount?: number;  // 新增：充值次数
+  totalConsume?: number;   // 新增：总消费积分
 }
 
 interface VideoForReview {
@@ -47,12 +51,45 @@ export function AdminPanel() {
     totalUsers: 0,
     totalVideos: 0,
     publicVideos: 0,
-    totalCreditsUsed: 0
+    totalCreditsUsed: 0,
+    totalRecharge: 0  // 新增：总充值金额
   });
+  
+  // 新增：提示词分页状态
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const pageSize = 50;
 
   useEffect(() => {
     fetchAdminData();
+    // 提示词切换页码时重置到第1页
+    if (activeTab !== 'prompts') {
+      setCurrentPage(1);
+    }
   }, [activeTab]);
+
+  // 新增：提示词分页加载
+  useEffect(() => {
+    if (activeTab === 'prompts') {
+      fetchPromptsPage();
+    }
+  }, [currentPage, activeTab]);
+
+  const fetchPromptsPage = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/admin/prompts?page=${currentPage}&page_size=${pageSize}`
+      );
+      const data = await response.json();
+      setPrompts(data.prompts || []);
+      setTotalPages(Math.ceil((data.total || 0) / pageSize));
+    } catch (error) {
+      console.error('获取提示词失败:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchAdminData = async () => {
     setLoading(true);
@@ -109,15 +146,32 @@ export function AdminPanel() {
   const handleUpdateUserCredits = async (userId: string, credits: number) => {
     const newCredits = prompt('请输入新的积分值:', credits.toString());
     if (!newCredits) return;
+    
+    const parsedCredits = parseInt(newCredits);
+    if (isNaN(parsedCredits) || parsedCredits < 0) {
+      alert('请输入有效的积分值（正整数）');
+      return;
+    }
+    
     try {
-      await fetch(`${API_BASE_URL}/api/admin/user/${userId}/credits`, {
+      const response = await fetch(`${API_BASE_URL}/api/admin/user/${userId}/credits`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ credits: parseInt(newCredits) })
+        body: JSON.stringify({ credits: parsedCredits })
       });
-      fetchAdminData();
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || '更新失败');
+      }
+      
+      console.log('✅ 积分更新成功');
+      // 刷新用户列表
+      await fetchAdminData();
+      alert(`积分已更新为 ${parsedCredits}`);
     } catch (error) {
       console.error('更新积分失败:', error);
+      alert(`更新积分失败: ${error}`);
     }
   };
 
@@ -126,7 +180,7 @@ export function AdminPanel() {
   };
 
   return (
-    <div className="flex-1 flex flex-col h-screen overflow-hidden bg-slate-50/30">
+    <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-50/30">
       {/* Header */}
       <div className="p-8 pb-4 border-b border-slate-200 bg-white">
         <div className="flex items-center justify-between">
@@ -230,6 +284,9 @@ export function AdminPanel() {
                       <th className="px-6 py-4 text-left text-xs font-medium text-slate-500 uppercase">用户</th>
                       <th className="px-6 py-4 text-left text-xs font-medium text-slate-500 uppercase">邮箱</th>
                       <th className="px-6 py-4 text-left text-xs font-medium text-slate-500 uppercase">积分</th>
+                      <th className="px-6 py-4 text-left text-xs font-medium text-slate-500 uppercase">总充值</th>
+                      <th className="px-6 py-4 text-left text-xs font-medium text-slate-500 uppercase">充值次数</th>
+                      <th className="px-6 py-4 text-left text-xs font-medium text-slate-500 uppercase">总消费</th>
                       <th className="px-6 py-4 text-left text-xs font-medium text-slate-500 uppercase">角色</th>
                       <th className="px-6 py-4 text-left text-xs font-medium text-slate-500 uppercase">注册时间</th>
                       <th className="px-6 py-4 text-right text-xs font-medium text-slate-500 uppercase">操作</th>
@@ -243,13 +300,28 @@ export function AdminPanel() {
                             <div className="w-10 h-10 bg-gradient-to-br from-purple-400 to-pink-400 rounded-full flex items-center justify-center text-white font-bold">
                               {user.email.charAt(0).toUpperCase()}
                             </div>
-                            <div className="font-medium text-slate-900">{user.id}</div>
+                            <div className="font-medium text-slate-900 text-sm max-w-[120px] truncate">{user.id}</div>
                           </div>
                         </td>
-                        <td className="px-6 py-4 text-slate-600">{user.email}</td>
+                        <td className="px-6 py-4 text-slate-600 text-sm">{user.email}</td>
                         <td className="px-6 py-4">
                           <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
-                            {user.credits} Credits
+                            {user.credits}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="text-sm font-medium text-orange-600">
+                            ￥{(user.totalRecharge || 0) / 100}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="text-sm text-slate-600">
+                            {user.rechargeCount || 0}次
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="text-sm text-slate-600">
+                            {user.totalConsume || 0}积分
                           </span>
                         </td>
                         <td className="px-6 py-4">
@@ -262,7 +334,7 @@ export function AdminPanel() {
                             <span className="px-3 py-1 bg-slate-100 text-slate-700 rounded-full text-sm">用户</span>
                           )}
                         </td>
-                        <td className="px-6 py-4 text-slate-600 text-sm">{formatDate(user.createdAt)}</td>
+                        <td className="px-6 py-4 text-slate-600 text-xs">{formatDate(user.createdAt)}</td>
                         <td className="px-6 py-4 text-right">
                           <button
                             onClick={() => handleUpdateUserCredits(user.id, user.credits)}
@@ -332,22 +404,79 @@ export function AdminPanel() {
 
             {/* Prompts Tab */}
             {activeTab === 'prompts' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {prompts.map((prompt) => (
-                  <div key={prompt.id} className="bg-white rounded-xl border border-slate-200 p-4 hover:shadow-lg transition-all">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="font-semibold text-slate-900">{prompt.productName}</h3>
-                      <MessageSquare size={16} className="text-purple-500" />
+              <div className="space-y-4">
+                <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                  <table className="w-full">
+                    <thead className="bg-slate-50 border-b border-slate-200">
+                      <tr>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-slate-500 uppercase w-[200px]">商品名称</th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-slate-500 uppercase">提示词内容</th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-slate-500 uppercase w-[180px]">用户</th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-slate-500 uppercase w-[150px]">创建时间</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {prompts.map((prompt) => (
+                        <tr key={prompt.id} className="hover:bg-slate-50">
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-2">
+                              <MessageSquare size={16} className="text-purple-500 flex-shrink-0" />
+                              <span className="font-medium text-slate-900 truncate">{prompt.productName}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <p className="text-sm text-slate-600 line-clamp-2 font-mono bg-slate-50 p-2 rounded">
+                              {prompt.content}
+                            </p>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="text-sm text-slate-600">{prompt.userEmail}</span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="text-xs text-slate-500">{formatDate(prompt.createdAt)}</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                
+                {/* 分页控件 */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between bg-white rounded-xl border border-slate-200 px-6 py-4">
+                    <div className="text-sm text-slate-600">
+                      第 {currentPage} / {totalPages} 页
                     </div>
-                    <p className="text-sm text-slate-600 line-clamp-3 mb-3 font-mono bg-slate-50 p-2 rounded">
-                      {prompt.content}
-                    </p>
-                    <div className="flex items-center justify-between text-xs text-slate-500">
-                      <span>{prompt.userEmail}</span>
-                      <span>{formatDate(prompt.createdAt)}</span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                        disabled={currentPage === 1}
+                        className={cn(
+                          "px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-1 transition-colors",
+                          currentPage === 1
+                            ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                            : "bg-purple-100 text-purple-700 hover:bg-purple-200"
+                        )}
+                      >
+                        <ChevronLeft size={16} />
+                        上一页
+                      </button>
+                      <button
+                        onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                        disabled={currentPage === totalPages}
+                        className={cn(
+                          "px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-1 transition-colors",
+                          currentPage === totalPages
+                            ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                            : "bg-purple-100 text-purple-700 hover:bg-purple-200"
+                        )}
+                      >
+                        下一页
+                        <ChevronRight size={16} />
+                      </button>
                     </div>
                   </div>
-                ))}
+                )}
               </div>
             )}
           </>

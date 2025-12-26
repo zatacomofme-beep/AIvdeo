@@ -39,6 +39,8 @@ export function DirectorPanel() {
     selectedCharacter,
     setSelectedCharacter,
     addGeneratedVideo,
+    myVideos,  // ✅ 新增：视频列表
+    updateVideoStatus,  // ✅ 新增：更新视频状态
     setShowCreateProduct,
     savePrompt
   } = useStore();
@@ -74,7 +76,7 @@ export function DirectorPanel() {
   // 点击下一步时才确认选择
   const handleConfirmProduct = () => {
     if (!tempSelectedProduct) {
-      alert('请先选择一个商品');
+      showToast.warning('请选择商品', '请先选择一个商品');
       return;
     }
     setCurrentProduct(tempSelectedProduct);
@@ -209,17 +211,24 @@ export function DirectorPanel() {
         return;
       }
       
+      // 映射前端的 orientation 参数到云雾API的格式
+      // vertical -> portrait (竖屏 9:16)
+      // horizontal -> landscape (横屏 16:9)
+      const apiOrientation = configForm.orientation === 'vertical' ? 'portrait' : 'landscape';
+      
+      console.log(`[视频生成] 参数映射: ${configForm.orientation} -> ${apiOrientation}`);
+      
       // 调用后端API生成视频
       const result = await api.generateVideo(
         script,  // prompt
         uploadedImages || [],  // images
-        configForm.orientation,  // orientation (portrait/landscape)
+        apiOrientation,  // orientation (已映射为 portrait/landscape)
         configForm.resolution === '720p' ? 'small' : 'large',  // size
         duration  // duration
       );
       
       // 立即添加到视频列表
-      const videoId = addGeneratedVideo({
+      const videoId = await addGeneratedVideo({
         url: result.url || '',
         thumbnail: uploadedImages[0] || '',  // 使用第一张图作为缩略图
         script: script,
@@ -229,6 +238,7 @@ export function DirectorPanel() {
         taskId: result.task_id,
         progress: (result.status === 'completed' && result.url) ? 100 : 0
       });
+      console.log('✅ 视频已保存，ID:', videoId);
       
       if (result.status === 'completed' && result.url) {
         // 视频立即完成，调用后端API扣除积分
@@ -274,7 +284,7 @@ export function DirectorPanel() {
       }
     } catch (error) {
       console.error('视频生成失败:', error);
-      alert('视频生成失败，请稍后重试');
+      showToast.error('视频生成失败', '请稍后重试');
       setGenerating(false);
     }
   };
@@ -292,14 +302,37 @@ export function DirectorPanel() {
         
         if (status.status === 'completed') {
           clearInterval(pollInterval);
-          // 视频生成完成，静默处理
+          // 视频生成完成，更新数据库中的视频状态
           console.log('✅ 视频生成完成:', status.video_url);
+          
+          // ✅ 关键修复：更新数据库中的视频URL和状态
+          const videoToUpdate = myVideos.find(v => v.taskId === taskId);
+          if (videoToUpdate) {
+            await updateVideoStatus(videoToUpdate.id, {
+              url: status.video_url,
+              thumbnail: status.thumbnail_url || videoToUpdate.thumbnail,
+              status: 'completed',
+              progress: 100
+            });
+            console.log('✅ 视频状态已同步到数据库，ID:', videoToUpdate.id);
+          }
+          
           setGenerating(false);
           setShowDirector(false);
           setVideoProgress(0);
         } else if (status.status === 'failed') {
           clearInterval(pollInterval);
-          alert('❌ 视频生成失败，请重试');
+          
+          // ✅ 更新失败状态
+          const videoToUpdate = myVideos.find(v => v.taskId === taskId);
+          if (videoToUpdate) {
+            await updateVideoStatus(videoToUpdate.id, {
+              status: 'failed',
+              error: status.error || '视频生成失败'
+            });
+          }
+          
+          showToast.error('视频生成失败', '请重试');
           setGenerating(false);
           setVideoProgress(0);
         }

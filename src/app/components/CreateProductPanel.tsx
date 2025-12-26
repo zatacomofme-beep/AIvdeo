@@ -3,6 +3,7 @@ import { X, Upload, Sparkles, Image as ImageIcon, Trash2, Images, Check } from '
 import { useStore } from '../lib/store';
 import { cn } from '../lib/utils';
 import { api, API_BASE_URL } from '../../lib/api';
+import { showToast } from '../lib/toast-utils';  // ✅ 导入 toast 工具
 
 // 定义九宫格图片类型
 interface GeneratedImage {
@@ -157,7 +158,7 @@ export function CreateProductPanel() {
     if (!files || files.length === 0) return;
 
     if (uploadedImages.length + files.length > 9) {
-      alert('最多只能上传9张图片');
+      showToast.warning('图片数量超限', '最多只能上传9张图片');
       e.target.value = '';
       return;
     }
@@ -175,7 +176,7 @@ export function CreateProductPanel() {
       console.log('✅ 图片上传成功');
     } catch (error) {
       console.error('图片上传失败:', error);
-      alert('❌ 图片上传失败，请重试');
+      showToast.error('上传失败', '图片上传失败，请重试');
     } finally {
       setIsUploading(false);
       e.target.value = '';
@@ -184,12 +185,12 @@ export function CreateProductPanel() {
 
   const handleSave = async () => {
     if (!productForm.name || !productForm.category) {
-      alert('请填写必填项：品名和类目');
+      showToast.warning('缺少必填项', '请填写必填项：品名和类目');
       return;
     }
 
     if (uploadedImages.length === 0) {
-      alert('请至少上传1张商品图片');
+      showToast.warning('缺少商品图片', '请至少上传1张商品图片');
       return;
     }
 
@@ -221,7 +222,7 @@ export function CreateProductPanel() {
       }
     } catch (error) {
       console.error('保存商品失败:', error);
-      alert('☠️ 保存失败，请重试');
+      showToast.error('保存失败', '请稍后重试');
     }
   };
 

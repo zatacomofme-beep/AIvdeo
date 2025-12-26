@@ -442,6 +442,39 @@ export const api = {
   },
 
   /**
+   * 获取用户信息（包括最新积分）
+   */
+  async getUserInfo(userId: string): Promise<{
+    id: string;
+    email: string;
+    username: string;
+    credits: number;
+    role: 'user' | 'admin';
+    isActive: boolean;
+    createdAt: number;
+  }> {
+    console.log('[API] 获取用户信息...');
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/user/${userId}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || '获取用户信息失败');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('获取用户信息失败:', error);
+      throw error;
+    }
+  },
+
+  /**
    * 消费积分
    */
   async consumeCredits(params: {
@@ -865,6 +898,99 @@ export const api = {
   },
 
   /**
+   * 保存视频到数据库
+   */
+  async saveVideo(videoData: {
+    user_id: string;
+    video_url: string;
+    thumbnail_url?: string;
+    script?: any;
+    product_name?: string;
+    status?: string;
+    task_id?: string;
+    progress?: number;
+    is_public?: boolean;
+  }): Promise<{
+    success: boolean;
+    video: {
+      id: string;
+      url: string;
+      thumbnail?: string;
+      script?: any;
+      productName?: string;
+      status: string;
+      isPublic: boolean;
+      taskId?: string;
+      progress?: number;
+      createdAt: number;
+    };
+  }> {
+    console.log('[API] 保存视频到数据库...', videoData);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/videos`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(videoData),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || '保存视频失败');
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('保存视频失败:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * 更新视频状态和URL（用于异步视频完成后同步到数据库）
+   */
+  async updateVideo(videoId: string, updates: {
+    video_url?: string;
+    thumbnail_url?: string;
+    status?: string;
+    progress?: number;
+    script?: any;
+    product_name?: string;
+  }): Promise<{
+    success: boolean;
+    video: {
+      id: string;
+      url: string;
+      thumbnail?: string;
+      script?: any;
+      productName?: string;
+      status: string;
+      isPublic: boolean;
+      taskId?: string;
+      progress?: number;
+      createdAt: number;
+    };
+  }> {
+    console.log(`[API] 更新视频${videoId}状态:`, updates);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/videos/${videoId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updates),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || '更新视频失败');
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('更新视频失败:', error);
+      throw error;
+    }
+  },
+
+  /**
    * 删除视频
    */
   async deleteVideo(videoId: string): Promise<{
@@ -906,6 +1032,64 @@ export const api = {
       return await response.json();
     } catch (error) {
       console.error('切换公开状态失败:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * 保存提示词到数据库
+   */
+  async savePrompt(promptData: {
+    user_id: string;
+    content: string;
+    product_name?: string;
+  }): Promise<{
+    success: boolean;
+    prompt: {
+      id: string;
+      content: string;
+      productName?: string;
+      createdAt: number;
+    };
+  }> {
+    console.log('[API] 保存提示词到数据库...', promptData);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/prompts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(promptData),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || '保存提示词失败');
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('保存提示词失败:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * 删除提示词
+   */
+  async deletePrompt(promptId: string): Promise<{
+    success: boolean;
+  }> {
+    console.log('[API] 删除提示词...', promptId);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/prompts/${promptId}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || '删除提示词失败');
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('删除提示词失败:', error);
       throw error;
     }
   }
