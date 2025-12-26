@@ -57,6 +57,7 @@ from routers.product import router as product_router
 from routers.prompt import router as prompt_router
 from routers.character import router as character_router
 from routers.project import router as project_router
+from routers.image import router as image_router
 
 # 加载环境变量
 load_dotenv()
@@ -308,7 +309,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="SoraDirector Backend", version="0.1.0", docs_url=None, redoc_url=None, openapi_url="/openapi.json", lifespan=lifespan)
 
-# 注册新架构路由（渐进式重构 - 阶段1&2&3&4&5）
+# 注册新架构路由（渐进式重构 - 阶段1&2&3&4&5&6）
 app.include_router(health_router, tags=["Health Check"])
 print("[ROUTER] ✅ 健康检查路由已注册: /api/health")
 
@@ -332,6 +333,9 @@ print("[ROUTER] ✅ 角色管理路由已注册: /api/characters")
 
 app.include_router(project_router, tags=["Project Management"])
 print("[ROUTER] ✅ 项目管理路由已注册: /api/projects")
+
+app.include_router(image_router, tags=["Image Processing"])
+print("[ROUTER] ✅ 图片处理路由已注册: /api/upload-image, /api/combine-images, /api/generate-nine-grid")
 
 # CORS：开发阶段先全放开
 app.add_middleware(
