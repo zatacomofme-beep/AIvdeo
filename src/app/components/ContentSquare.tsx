@@ -1,25 +1,57 @@
 import React, { useState, useEffect } from 'react';
-import { Heart, Play, User, Search, Filter, Loader2 } from 'lucide-react';
+import { Heart, Play, User, Search, Filter, Loader2, XCircle } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 const API_BASE_URL = 'https://semopic.com';
 
 interface PublicVideo {
   id: string;
-  title: string;
-  author: string;
-  likes: number;
-  views: number;
+  productName: string;  // 后端返回的是productName
+  url: string;  // 后端返回的是url
   thumbnail: string;
-  videoUrl: string;
-  duration: string;
+  script: string;
+  status: string;
+  isPublic: boolean;
   createdAt: number;
+  category?: string;  // 新增：商品类目
 }
+
+// 商品类目定义（与CreateProductPanel保持一致）
+const CATEGORIES = [
+  { value: 'all', label: '全部推荐' },
+  { value: 'home', label: '家居生活' },
+  { value: 'fashion', label: '服装鞋履配饰' },
+  { value: 'beauty', label: '美妆个护' },
+  { value: 'appliances', label: '家用电器' },
+  { value: 'electronics', label: '电子产品' },
+  { value: 'computers', label: '电脑及配件' },
+  { value: 'digital', label: '数码配件' },
+  { value: 'sports', label: '运动户外' },
+  { value: 'toys', label: '玩具游戏' },
+  { value: 'baby', label: '母婴用品' },
+  { value: 'health', label: '健康保健' },
+  { value: 'pet', label: '宠物用品' },
+  { value: 'food', label: '食品饮料' },
+  { value: 'automotive', label: '汽车用品' },
+  { value: 'office', label: '办公用品' },
+  { value: 'tools', label: '工具家装' },
+  { value: 'arts', label: '手工艺术' },
+  { value: 'books', label: '图书媒体' },
+  { value: 'jewelry', label: '珠宝首饰' },
+  { value: 'bags', label: '箱包' },
+  { value: 'music', label: '乐器' },
+  { value: 'industrial', label: '工业科学' },
+  { value: 'garden', label: '园艺户外' },
+  { value: 'grocery', label: '杂货' },
+  { value: 'other', label: '其他' },
+];
 
 export function ContentSquare() {
   const [contents, setContents] = useState<PublicVideo[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [playingVideo, setPlayingVideo] = useState<string | null>(null);  // 新增：当前播放的视频ID
+  const [selectedCategory, setSelectedCategory] = useState('all');  // 新增：选中的类目
 
   // 获取公开视频
   useEffect(() => {
@@ -31,6 +63,7 @@ export function ContentSquare() {
       const response = await fetch(`${API_BASE_URL}/api/public-videos`);
       if (!response.ok) throw new Error('获取视频失败');
       const data = await response.json();
+      console.log('内容广场数据:', data);
       setContents(data.videos || []);
     } catch (error) {
       console.error('获取公开视频失败:', error);
@@ -39,9 +72,18 @@ export function ContentSquare() {
     }
   };
 
-  const filteredContents = contents.filter(item =>
-    item.title.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredContents = contents.filter(item => {
+    // 类目筛选
+    const matchCategory = selectedCategory === 'all' || item.category === selectedCategory;
+    // 搜索筛选
+    const matchSearch = item.productName.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchCategory && matchSearch;
+  });
+
+  // 新增：播放视频
+  const handlePlayVideo = (videoId: string) => {
+    setPlayingVideo(videoId);
+  };
 
   return (
     <div className="flex-1 overflow-y-auto custom-scrollbar p-8 bg-slate-50">
@@ -70,18 +112,19 @@ export function ContentSquare() {
       </div>
 
       {/* Tags/Categories */}
-      <div className="flex gap-3 mb-8 overflow-x-auto pb-2 no-scrollbar">
-        {['全部推荐', '电商广告', '产品展示', '虚拟模特', '场景漫游', '特效合成', '短剧', '教育培训'].map((tag, index) => (
+      <div className="flex flex-wrap gap-3 mb-8">
+        {CATEGORIES.map((category) => (
           <button
-            key={tag}
+            key={category.value}
+            onClick={() => setSelectedCategory(category.value)}
             className={cn(
               "px-4 py-1.5 rounded-md text-sm font-medium whitespace-nowrap transition-all",
-              index === 0
+              selectedCategory === category.value
                 ? "bg-tech text-white"
                 : "bg-white border border-slate-200 text-slate-600 hover:border-tech/50 hover:text-tech hover:bg-tech-light/10"
             )}
           >
-            {tag}
+            {category.label}
           </button>
         ))}
       </div>
@@ -101,50 +144,66 @@ export function ContentSquare() {
           <p className="text-sm mt-2">管理员尚未审核通过任何作品</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
           {filteredContents.map((item) => (
           <div key={item.id} className="tech-card group overflow-hidden hover:shadow-tech-md transition-all">
             {/* Thumbnail */}
-            <div className="aspect-[16/9] relative overflow-hidden bg-slate-100">
+            <div className="aspect-[9/16] relative overflow-hidden bg-slate-100">
               <img 
                 src={item.thumbnail} 
-                alt={item.title}
+                alt={item.productName}
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
               />
               <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-[2px]">
-                <button className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center text-white hover:bg-white/30 hover:scale-110 transition-all border border-white/30">
+                <button 
+                  onClick={() => handlePlayVideo(item.id)}
+                  className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center text-white hover:bg-white/30 hover:scale-110 transition-all border border-white/30"
+                >
                   <Play fill="currentColor" size={20} className="ml-1" />
                 </button>
-              </div>
-              <div className="absolute bottom-2 right-2 px-1.5 py-0.5 bg-black/60 backdrop-blur-md rounded text-[10px] text-white font-medium">
-                {item.duration}
               </div>
             </div>
 
             {/* Info */}
             <div className="p-4">
               <h3 className="font-semibold text-slate-900 mb-1 line-clamp-1 group-hover:text-tech transition-colors">
-                {item.title}
+                {item.productName}
               </h3>
               
               <div className="flex items-center justify-between mt-3">
                 <div className="flex items-center gap-2 text-xs text-slate-500">
-                  <div className="w-6 h-6 bg-gradient-to-br from-slate-200 to-slate-300 rounded-full flex items-center justify-center text-slate-600 font-bold text-[10px]">
-                    {item.author.charAt(0)}
-                  </div>
-                  <span className="truncate max-w-[80px]">{item.author}</span>
-                </div>
-                
-                <div className="flex items-center gap-3 text-xs text-slate-400">
-                  <div className="flex items-center gap-1">
-                    <Heart size={12} className="group-hover:text-pink-500 transition-colors" />
-                    <span>{item.likes}</span>
-                  </div>
+                  <span className="text-[10px]">{new Date(item.createdAt).toLocaleDateString('zh-CN')}</span>
                 </div>
               </div>
             </div>
           </div>
         ))}
+        </div>
+      )}
+      
+      {/* 视频播放弹窗 */}
+      {playingVideo && (
+        <div 
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => setPlayingVideo(null)}
+        >
+          <div 
+            className="relative w-full max-w-4xl aspect-video bg-black rounded-lg overflow-hidden shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setPlayingVideo(null)}
+              className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-md text-white flex items-center justify-center transition-colors"
+            >
+              <XCircle size={24} />
+            </button>
+            <video
+              src={contents.find(v => v.id === playingVideo)?.url}
+              controls
+              autoPlay
+              className="w-full h-full object-contain"
+            />
+          </div>
         </div>
       )}
     </div>

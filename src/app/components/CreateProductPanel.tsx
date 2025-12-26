@@ -3,7 +3,6 @@ import { X, Upload, Sparkles, Image as ImageIcon, Trash2, Images, Check } from '
 import { useStore } from '../lib/store';
 import { cn } from '../lib/utils';
 import { api, API_BASE_URL } from '../../lib/api';
-import { Input, Textarea, Select, SelectItem, Button, Card, CardBody } from '@heroui/react';
 
 // 定义九宫格图片类型
 interface GeneratedImage {
@@ -195,6 +194,7 @@ export function CreateProductPanel() {
     }
 
     try {
+      // 创建商品
       await saveProduct({
         name: productForm.name,
         category: productForm.category,
@@ -202,7 +202,9 @@ export function CreateProductPanel() {
         sellingPoints: productForm.sellingPoints,
         imageUrls: uploadedImages
       });
+      console.log('✅ 商品创建成功');
 
+      // 清空表单和状态
       setProductForm({
         name: '',
         category: '',
@@ -212,10 +214,27 @@ export function CreateProductPanel() {
       setUploadedImages([]);
       setShowCreateProduct(false);
       
-      console.log('✅ 商品创建成功');
+      // 重新加载用户数据
+      if (user?.id) {
+        const { loadUserData } = useStore.getState();
+        await loadUserData(user.id);
+      }
     } catch (error) {
       console.error('保存商品失败:', error);
+      alert('☠️ 保存失败，请重试');
     }
+  };
+
+  // 关闭面板时清空表单
+  const handleClose = () => {
+    setShowCreateProduct(false);
+    setProductForm({
+      name: '',
+      category: '',
+      usage: '',
+      sellingPoints: ''
+    });
+    setUploadedImages([]);
   };
 
   if (!showCreateProduct) return null;
@@ -233,11 +252,13 @@ export function CreateProductPanel() {
               </div>
               <div>
                 <h2 className="font-bold text-xl text-slate-800">创建商品</h2>
-                <p className="text-xs text-slate-500 mt-1">上传商品图片并填写基础信息</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  上传商品图片并填写基础信息
+                </p>
               </div>
             </div>
             <button
-              onClick={() => setShowCreateProduct(false)}
+              onClick={handleClose}
               className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-all"
             >
               <X size={24} />
@@ -339,88 +360,85 @@ export function CreateProductPanel() {
               {/* 商品信息表单 */}
               <div className="grid grid-cols-2 gap-6">
                 <div className="col-span-1">
-                  <Input
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    品名 <span className="text-red-500">*</span>
+                  </label>
+                  <input
                     type="text"
-                    label="品名"
-                    placeholder="例如：Muspus口红"
                     value={productForm.name}
-                    onValueChange={(value) => setProductForm({ ...productForm, name: value })}
-                    variant="bordered"
-                    isRequired
-                    classNames={{
-                      input: "bg-white",
-                      inputWrapper: "border-slate-200 hover:border-primary focus-within:border-primary"
-                    }}
+                    onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
+                    placeholder="例如：Muspus口红"
+                    className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-yellow-500 focus:ring-2 focus:ring-yellow-100 transition-all hover:border-slate-300"
                   />
                 </div>
 
                 <div className="col-span-1">
-                  <Select
-                    label="类目"
-                    placeholder="请选择类目"
-                    selectedKeys={productForm.category ? [productForm.category] : []}
-                    onSelectionChange={(keys) => {
-                      const selected = Array.from(keys)[0] as string;
-                      setProductForm({ ...productForm, category: selected });
-                    }}
-                    variant="bordered"
-                    isRequired
-                    classNames={{
-                      trigger: "border-slate-200 hover:border-primary"
-                    }}
-                  >
-                    <SelectItem key="fashion">
-                      服装鞋履配饰 (Fashion & Accessories)
-                    </SelectItem>
-                    <SelectItem key="beauty">
-                      美妆个护 (Beauty & Personal Care)
-                    </SelectItem>
-                    <SelectItem key="home">
-                      家居生活 (Home & Living)
-                    </SelectItem>
-                    <SelectItem key="electronics">
-                      电子产品 (Electronics)
-                    </SelectItem>
-                    <SelectItem key="sports">
-                      运动户外 (Sports & Outdoors)
-                    </SelectItem>
-                    <SelectItem key="food">
-                      食品饮料 (Food & Beverages)
-                    </SelectItem>
-                    <SelectItem key="other">
-                      其他 (Other)
-                    </SelectItem>
-                  </Select>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    类目 <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <select
+                      value={productForm.category}
+                      onChange={(e) => setProductForm({ ...productForm, category: e.target.value })}
+                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 appearance-none focus:outline-none focus:border-yellow-500 focus:ring-2 focus:ring-yellow-100 transition-all hover:border-slate-300"
+                    >
+                      <option value="">请选择类目</option>
+                      <option value="home">家居生活 (Home & Living)</option>
+                      <option value="fashion">服装鞋履配饰 (Fashion & Accessories)</option>
+                      <option value="beauty">美妆个护 (Beauty & Personal Care)</option>
+                      <option value="appliances">家用电器 (Home Appliances)</option>
+                      <option value="electronics">电子产品 (Electronics)</option>
+                      <option value="computers">电脑及配件 (Computers & Accessories)</option>
+                      <option value="digital">数码配件 (Digital Accessories)</option>
+                      <option value="sports">运动户外 (Sports & Outdoors)</option>
+                      <option value="toys">玩具游戏 (Toys & Games)</option>
+                      <option value="baby">母婴用品 (Baby & Kids)</option>
+                      <option value="health">健康保健 (Health & Wellness)</option>
+                      <option value="pet">宠物用品 (Pet Supplies)</option>
+                      <option value="food">食品饮料 (Food & Beverages)</option>
+                      <option value="automotive">汽车用品 (Automotive)</option>
+                      <option value="office">办公用品 (Office Products)</option>
+                      <option value="tools">工具家装 (Tools & Home Improvement)</option>
+                      <option value="arts">手工艺术 (Arts & Crafts)</option>
+                      <option value="books">图书媒体 (Books & Media)</option>
+                      <option value="jewelry">珠宝首饰 (Jewelry)</option>
+                      <option value="bags">箱包 (Bags & Luggage)</option>
+                      <option value="music">乐器 (Musical Instruments)</option>
+                      <option value="industrial">工业科学 (Industrial & Scientific)</option>
+                      <option value="garden">园艺户外 (Garden & Outdoor)</option>
+                      <option value="grocery">杂货 (Grocery)</option>
+                      <option value="other">其他 (Other)</option>
+                    </select>
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                      ▼
+                    </div>
+                  </div>
                 </div>
               </div>
 
               <div>
-                <Textarea
-                  label="使用方式"
-                  placeholder="例如：涂抹在嘴唇上，持久不易脱色，滋润保湿"
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  使用方式
+                </label>
+                <textarea
                   value={productForm.usage}
-                  onValueChange={(value) => setProductForm({ ...productForm, usage: value })}
-                  variant="bordered"
-                  minRows={3}
-                  classNames={{
-                    input: "bg-white",
-                    inputWrapper: "border-slate-200 hover:border-primary focus-within:border-primary"
-                  }}
+                  onChange={(e) => setProductForm({ ...productForm, usage: e.target.value })}
+                  placeholder="例如：涂抹在嘴唇上，持久不易脱色，滋润保湿"
+                  rows={3}
+                  className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-yellow-500 focus:ring-2 focus:ring-yellow-100 transition-all hover:border-slate-300 resize-none"
                 />
               </div>
 
               <div>
-                <Textarea
-                  label="核心卖点"
-                  placeholder="例如：持久显色6-12小时、喝水、进食不易脱妆、不沾杯、显白适配"
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  核心卖点
+                </label>
+                <textarea
                   value={productForm.sellingPoints}
-                  onValueChange={(value) => setProductForm({ ...productForm, sellingPoints: value })}
-                  variant="bordered"
-                  minRows={3}
-                  classNames={{
-                    input: "bg-white",
-                    inputWrapper: "border-slate-200 hover:border-primary focus-within:border-primary"
-                  }}
+                  onChange={(e) => setProductForm({ ...productForm, sellingPoints: e.target.value })}
+                  placeholder="例如：持久显色6-12小时、喝水、进食百不易脱妆、不沾杯、显白适配"
+                  rows={3}
+                  className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-yellow-500 focus:ring-2 focus:ring-yellow-100 transition-all hover:border-slate-300 resize-none"
                 />
               </div>
             </div>
@@ -428,21 +446,19 @@ export function CreateProductPanel() {
 
           {/* Footer */}
           <div className="px-8 py-6 border-t border-slate-100 bg-white/60 backdrop-blur-md flex items-center justify-end gap-3">
-            <Button
-              variant="bordered"
-              onPress={() => setShowCreateProduct(false)}
-              className="border-slate-200"
+            <button
+              onClick={() => setShowCreateProduct(false)}
+              className="px-6 py-2.5 border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 transition-all font-medium"
             >
               取消
-            </Button>
-            <Button
-              color="primary"
-              onPress={handleSave}
-              isDisabled={!productForm.name || !productForm.category || uploadedImages.length === 0}
-              className="font-medium"
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={!productForm.name || !productForm.category || uploadedImages.length === 0}
+              className="btn-tech-ai px-6 py-2.5 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               保存商品
-            </Button>
+            </button>
           </div>
         </div>
 

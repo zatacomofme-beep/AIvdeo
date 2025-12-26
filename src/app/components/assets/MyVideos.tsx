@@ -1,169 +1,101 @@
-import { Play, Download, Trash2, Clock, Film, Loader2, CheckCircle2, XCircle, AlertCircle, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Play, Download, Trash2, Clock, Film, Loader2, CheckCircle2, XCircle, AlertTriangle, Globe, Lock } from 'lucide-react';
 import { useStore } from "../../lib/store";
 import { cn } from "../../lib/utils";
 import { api } from '../../../lib/api';
 import { useEffect, useState } from 'react';
-import { Card, CardBody, CardFooter, Progress, Button, Chip, Tooltip } from '@heroui/react';
 
 export function MyVideos() {
-  const { myVideos, deleteVideo, updateVideoStatus } = useStore();
+  const { myVideos, deleteVideo, updateVideoStatus, toggleVideoPublic } = useStore();
   
-  // 跟踪每个视频的上次查询时间（3分钟冷却）
-  const [lastQueryTime, setLastQueryTime] = useState<{ [key: string]: number }>({});
-  const [querying, setQuerying] = useState<{ [key: string]: boolean }>({});
+  const [toggling, setToggling] = useState<{ [key: string]: boolean }>({});  // 新增：跟踪公开状态切换中
+  const [playingVideo, setPlayingVideo] = useState<string | null>(null);  // 新增：当前播放的视频ID
 
-  // 手动查询视频状态
-  const handleManualQuery = async (video: any) => {
-    const now = Date.now();
-    const lastTime = lastQueryTime[video.id] || 0;
-    const cooldown = 3 * 60 * 1000; // 3分钟
-    
-    // 检查冷却时间
-    if (now - lastTime < cooldown) {
-      const remainingSeconds = Math.ceil((cooldown - (now - lastTime)) / 1000);
-      alert(`请等待 ${Math.floor(remainingSeconds / 60)} 分 ${remainingSeconds % 60} 秒后再查询`);
+  // 新增：播放视频
+  const handlePlayVideo = (video: any) => {
+    if (video.status !== 'completed' || !video.url) {
+      alert('视频尚未完成，无法播放');
+      return;
+    }
+    setPlayingVideo(video.id);
+  };
+
+  // 新增：切换视频公开状态
+  const handleTogglePublic = async (video: any) => {
+    if (video.status !== 'completed') {
+      alert('只有已完成的视频才能分享到内容广场');
       return;
     }
 
-    setQuerying({ ...querying, [video.id]: true });
+    setToggling({ ...toggling, [video.id]: true });
     
     try {
-      console.log(`[手动查询] 视频${video.id}`);
-      const status = await api.queryVideoTask(video.taskId!);
-      console.log(`[手动查询] 视频${video.id}状态:`, status);
-      
-      // 更新进度
-      if (status.progress !== undefined && typeof status.progress === 'number') {
-        updateVideoStatus(video.id, { progress: status.progress });
-      }
-      
-      // 检查任务状态
-      if (status.status === 'completed') {
-        console.log(`[完成] 视频${video.id}生成完成`);
-        updateVideoStatus(video.id, {
-          status: 'completed',
-          url: status.video_url || status.url || video.url,
-          thumbnail: status.thumbnail || video.thumbnail,
-          progress: 100
-        });
-        alert('✅ 视频生成完成！');
-      } else if (status.status === 'failed') {
-        console.error(`[失败] 视频${video.id}生成失败:`, status.error);
-        updateVideoStatus(video.id, {
-          status: 'failed',
-          error: status.error || status.message || '生成失败'
-        });
-        alert(`❌ 视频生成失败: ${status.error || '未知错误'}`);
-      } else {
-        alert(`🔄 视频仍在生成中，进度: ${status.progress || 0}%`);
-      }
-      
-      // 更新最后查询时间
-      setLastQueryTime({ ...lastQueryTime, [video.id]: now });
+      const newPublicStatus = !video.isPublic;
+      await toggleVideoPublic(video.id, newPublicStatus);
+      alert(newPublicStatus ? '✅ 已开放到内容广场' : '✅ 已从内容广场移除');
     } catch (error) {
-      console.error(`手动查询失败:`, error);
-      alert('⚠️ 查询失败，请稍后再试');
+      console.error('切换公开状态失败:', error);
     } finally {
-      setQuerying({ ...querying, [video.id]: false });
+      setToggling({ ...toggling, [video.id]: false });
     }
   };
 
-  // 轮询处理中的视频状态
-  // 优化策略：5分钟、10分钟、15分钟、20分钟各查询一次，完成或失败后停止
+  // 页面加载时查询一次处理中的视频状态
   useEffect(() => {
-    const processingVideos = myVideos.filter(v => v.status === 'processing' && v.taskId);
-    
-    if (processingVideos.length === 0) return;
-
-    const timers: NodeJS.Timeout[] = [];
-
-    // 定义查询函数
-    const queryVideo = async (video: any, attemptNumber: number) => {
-      try {
-        console.log(`[自动查询${attemptNumber}] 视频${video.id} - ${attemptNumber * 5}分钟后查询`);
-        const status = await api.queryVideoTask(video.taskId!);
-        console.log(`[自动查询${attemptNumber}] 视频${video.id}状态:`, status);
-        
-        // 更新进度
-        if (status.progress !== undefined && typeof status.progress === 'number') {
-          updateVideoStatus(video.id, { progress: status.progress });
-        }
-        
-        // 检查任务状态
-        if (status.status === 'completed') {
-          console.log(`[完成] 视频${video.id}生成完成`);
-          updateVideoStatus(video.id, {
-            status: 'completed',
-            url: status.video_url || status.url || video.url,
-            thumbnail: status.thumbnail || video.thumbnail,
-            progress: 100
-          });
-          return true; // 返回true表示已完成，停止后续查询
-        } else if (status.status === 'failed') {
-          console.error(`[失败] 视频${video.id}生成失败:`, status.error);
-          updateVideoStatus(video.id, {
-            status: 'failed',
-            error: status.error || status.message || '生成失败'
-          });
-          return true; // 返回true表示已失败，停止后续查询
-        }
-        return false; // 继续查询
-      } catch (error) {
-        console.error(`查询视频${video.id}状态失败:`, error);
-        return false; // 查询失败，继续尝试下次查询
+    const checkProcessingVideos = async () => {
+      const processingVideos = myVideos.filter(v => 
+        v.status === 'processing' && v.taskId
+      );
+      
+      if (processingVideos.length === 0) {
+        console.log('[页面加载] 没有处理中的视频');
+        return;
       }
-    };
-
-    for (const video of processingVideos) {
-      let isFinished = false; // 标记视频是否已完成
-
-      // 5分钟后第1次查询
-      const timer1 = setTimeout(async () => {
-        if (!isFinished) {
-          isFinished = await queryVideo(video, 1);
-        }
-      }, 5 * 60 * 1000); // 5分钟
-      timers.push(timer1);
-
-      // 10分钟后第2次查询
-      const timer2 = setTimeout(async () => {
-        if (!isFinished) {
-          isFinished = await queryVideo(video, 2);
-        }
-      }, 10 * 60 * 1000); // 10分钟
-      timers.push(timer2);
-
-      // 15分钟后第3次查询
-      const timer3 = setTimeout(async () => {
-        if (!isFinished) {
-          isFinished = await queryVideo(video, 3);
-        }
-      }, 15 * 60 * 1000); // 15分钟
-      timers.push(timer3);
-
-      // 20分钟后第4次查询（最后一次）
-      const timer4 = setTimeout(async () => {
-        if (!isFinished) {
-          const finished = await queryVideo(video, 4);
-          // 如果20分钟后还没完成，标记为超时失败
-          if (!finished) {
-            console.log(`[超时] 视频${video.id} 20分钟后仍在处理中，标记为失败`);
+      
+      console.log(`[页面加载] 发现 ${processingVideos.length} 个处理中的视频，开始查询状态...`);
+      
+      for (const video of processingVideos) {
+        try {
+          console.log(`[查询] 视频${video.id}, taskId: ${video.taskId}`);
+          const status = await api.queryVideoTask(video.taskId!);
+          console.log(`[查询] 视频${video.id}状态:`, status);
+          
+          // 更新进度
+          if (status.progress !== undefined && typeof status.progress === 'number') {
+            updateVideoStatus(video.id, { progress: status.progress });
+          }
+          
+          // 检查任务状态
+          if (status.status === 'completed') {
+            console.log(`[完成] 视频${video.id}已生成完成`);
+            updateVideoStatus(video.id, {
+              status: 'completed',
+              url: status.video_url || status.url || video.url,
+              thumbnail: status.thumbnail || video.thumbnail,
+              progress: 100
+            });
+          } else if (status.status === 'failed') {
+            console.error(`[失败] 视频${video.id}生成失败:`, status.error);
             updateVideoStatus(video.id, {
               status: 'failed',
-              error: '视频生成超时（超过20分钟）',
-              progress: 0
+              error: status.error || status.message || '生成失败'
             });
+          } else {
+            console.log(`[处理中] 视频${video.id}仍在生成，进度: ${status.progress || 0}%`);
           }
+        } catch (error) {
+          console.error(`[查询] 视频${video.id}查询失败:`, error);
         }
-      }, 20 * 60 * 1000); // 20分钟
-      timers.push(timer4);
-    }
-
-    return () => {
-      // 清理所有定时器
-      timers.forEach(timer => clearTimeout(timer));
+        
+        // 避免频繁请求，每个视频查询之间间隔300ms
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
+      
+      console.log('[页面加载] 所有处理中的视频状态查询完成');
     };
-  }, [myVideos, updateVideoStatus]);
+    
+    // 组件加载时立即执行查询
+    checkProcessingVideos();
+  }, []); // 空依赖数组，只在组件挂载时执行一次
 
   const formatDate = (timestamp: number) => {
     return new Date(timestamp).toLocaleString('zh-CN', {
@@ -215,17 +147,15 @@ export function MyVideos() {
         <p className="text-slate-600 mt-2 text-sm">管理您生成的所有 AI 视频作品</p>
         
         {/* 3天有效期提醒 */}
-        <Card className="mt-4 bg-warning-50 border-warning-200">
-          <CardBody className="flex flex-row gap-3 items-start">
-            <AlertTriangle className="text-warning-600 flex-shrink-0 mt-0.5" size={20} />
-            <div className="flex-1">
-              <h3 className="text-sm font-semibold text-warning-900 mb-1">重要提醒</h3>
-              <p className="text-sm text-warning-700">
-                受限于当前的测试环境，视频的保存时间只有 <span className="font-bold">3天</span>，生成成功的视频请在3天内下载保存到本地。
-              </p>
-            </div>
-          </CardBody>
-        </Card>
+        <div className="mt-4 tech-card p-4 bg-amber-50 border-amber-300">
+          <AlertTriangle className="text-amber-600 flex-shrink-0 mt-0.5" size={20} />
+          <div className="flex-1">
+            <h3 className="text-sm font-semibold text-amber-900 mb-1">重要提醒</h3>
+            <p className="text-sm text-amber-700">
+              受限于当前的测试环境，视频的保存时间只有 <span className="font-bold">3天</span>，生成成功的视频请在3天内下载保存到本地。
+            </p>
+          </div>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-8 pt-0 custom-scrollbar bg-slate-50">
@@ -240,149 +170,161 @@ export function MyVideos() {
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
             {myVideos.map((video) => (
-              <Card 
+              <div 
                 key={video.id} 
-                className="group overflow-hidden hover:scale-[1.02] transition-transform"
-                isPressable={video.status === 'completed'}
-                onPress={() => video.status === 'completed' && window.open(video.url, '_blank')}
+                className="tech-card group relative overflow-hidden hover:shadow-tech-md transition-all"
               >
-                <CardBody className="p-0">
-                  {/* Thumbnail Container */}
-                  <div className="aspect-[9/16] relative bg-slate-100">
-                    {/* 状态徽章 - 使用 Chip */}
-                    {video.status === 'processing' && (
-                      <Chip 
-                        className="absolute top-2 left-2 z-10" 
-                        color="primary" 
-                        variant="shadow"
-                        startContent={<Loader2 size={14} className="animate-spin" />}
-                      >
-                        生成中 {video.progress ? `${video.progress}%` : ''}
-                      </Chip>
+                {/* Thumbnail Container */}
+                <div className="aspect-[9/16] relative bg-slate-100">
+                  {/* 状态徽章 */}
+                  {getStatusBadge(video)}
+                  
+                  <img 
+                    src={video.thumbnail || video.url} 
+                    alt={video.productName}
+                    className={cn(
+                      "w-full h-full object-cover transition-transform duration-500",
+                      video.status === 'completed' && "group-hover:scale-105",
+                      video.status === 'processing' && "opacity-50"
                     )}
-                    {video.status === 'completed' && (
-                      <Chip 
-                        className="absolute top-2 left-2 z-10" 
-                        color="success" 
-                        variant="shadow"
-                        startContent={<CheckCircle2 size={14} />}
-                      >
-                        已完成
-                      </Chip>
-                    )}
-                    {video.status === 'failed' && (
-                      <Chip 
-                        className="absolute top-2 left-2 z-10" 
-                        color="danger" 
-                        variant="shadow"
-                        startContent={<XCircle size={14} />}
-                      >
-                        失败
-                      </Chip>
-                    )}
-                    
-                    <img 
-                      src={video.thumbnail || video.url} 
-                      alt={video.productName}
-                      className={cn(
-                        "w-full h-full object-cover transition-transform duration-500",
-                        video.status === 'completed' && "group-hover:scale-110",
-                        video.status === 'processing' && "opacity-50"
-                      )}
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1000&auto=format&fit=crop';
-                      }}
-                    />
-                    
-                    {/* 进度条 - 使用 Progress */}
-                    {video.status === 'processing' && video.progress !== undefined && (
-                      <div className="absolute bottom-0 left-0 right-0">
-                        <Progress 
-                          size="sm" 
-                          value={video.progress} 
-                          color="primary"
-                          className="rounded-none"
-                        />
-                      </div>
-                    )}
-                    
-                    {/* Overlay - 只在完成时显示 */}
-                    {video.status === 'completed' && (
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-4">
-                        <div className="flex items-center justify-center absolute inset-0">
-                          <Button
-                            isIconOnly
-                            color="primary"
-                            variant="shadow"
-                            className="w-14 h-14 transform scale-0 group-hover:scale-100 transition-transform duration-300"
-                            onPress={() => window.open(video.url, '_blank')}
-                          >
-                            <Play size={24} fill="currentColor" className="ml-1" />
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Top Actions */}
-                    <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                      <Tooltip content="删除视频" color="danger">
-                        <Button
-                          isIconOnly
-                          size="sm"
-                          color="danger"
-                          variant="shadow"
-                          onPress={() => deleteVideo(video.id)}
-                        >
-                          <Trash2 size={14} />
-                        </Button>
-                      </Tooltip>
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1000&auto=format&fit=crop';
+                    }}
+                  />
+                  
+                  {/* 进度条 */}
+                  {video.status === 'processing' && video.progress !== undefined && (
+                    <div className="absolute bottom-0 left-0 right-0 h-1 bg-slate-200">
+                      <div 
+                        className="h-full bg-blue-500 transition-all duration-300"
+                        style={{ width: `${video.progress}%` }}
+                      />
                     </div>
+                  )}
+                  
+                  {/* 已完成视频：显示播放按钮 */}
+                  {video.status === 'completed' && (
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-4">
+                      <div className="flex items-center justify-center absolute inset-0">
+                        <button 
+                          onClick={() => handlePlayVideo(video)}
+                          className="w-12 h-12 rounded-full bg-tech text-white flex items-center justify-center transform scale-0 group-hover:scale-100 transition-transform duration-300 shadow-tech-glow hover:bg-tech-hover"
+                        >
+                          <Play size={20} fill="currentColor" className="ml-1" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Top Actions */}
+                  <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button 
+                      onClick={() => deleteVideo(video.id)}
+                      className="p-2 bg-white/90 backdrop-blur-md text-red-500 hover:text-red-600 rounded-lg hover:bg-white transition-colors shadow-sm"
+                      title="删除视频"
+                    >
+                      <Trash2 size={16} />
+                    </button>
                   </div>
-                </CardBody>
+                </div>
 
                 {/* Info */}
-                <CardFooter className="flex-col items-start gap-2">
-                  <h3 className="font-semibold text-slate-900 truncate w-full" title={video.productName}>
+                <div className="p-4 border-t border-slate-100 bg-white">
+                  <h3 className="font-semibold text-slate-900 truncate mb-1" title={video.productName}>
                     {video.productName}
                   </h3>
-                  <div className="flex items-center justify-between w-full text-xs text-slate-500">
+                  <div className="flex items-center justify-between text-xs text-slate-500">
                     <div className="flex items-center gap-1">
                       <Clock size={12} />
                       {formatDate(video.createdAt)}
                     </div>
                     {video.status === 'completed' && (
-                      <Button 
-                        size="sm"
-                        variant="light"
-                        color="primary"
-                        startContent={<Download size={12} />}
-                        className="h-6 min-w-0 px-2 text-xs"
-                        onPress={() => window.open(video.url, '_blank')}
+                      <button 
+                        className="flex items-center gap-1 text-tech hover:text-tech-hover transition-colors font-medium"
+                        onClick={() => window.open(video.url, '_blank')}
                       >
+                        <Download size={12} />
                         下载
-                      </Button>
+                      </button>
+                    )}
+                    {video.status === 'processing' && (
+                      <span className="text-blue-600 font-medium">
+                        {video.progress ? `${video.progress}%` : '处理中...'}
+                      </span>
+                    )}
+                    {video.status === 'failed' && (
+                      <span className="text-red-600 font-medium" title={video.error}>
+                        生成失败
+                      </span>
                     )}
                   </div>
-                  {/* 处理中的视频显示手动查询按钮 */}
-                  {video.status === 'processing' && (
-                    <Button
-                      size="sm"
-                      color="primary"
-                      variant="flat"
-                      className="w-full"
-                      startContent={querying[video.id] ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-                      isLoading={querying[video.id]}
-                      onPress={() => handleManualQuery(video)}
+                  {/* 处理中：不显示任何按钮，状态会自动更新 */}
+                  {/* 已完成的视频显示公开/私密切换按钮 */}
+                  {video.status === 'completed' && (
+                    <button
+                      onClick={() => handleTogglePublic(video)}
+                      disabled={toggling[video.id]}
+                      className={cn(
+                        "mt-2 w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
+                        video.isPublic 
+                          ? "bg-green-50 hover:bg-green-100 text-green-700 border border-green-300"
+                          : "bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-300"
+                      )}
                     >
-                      {querying[video.id] ? '查询中...' : '刷新状态'}
-                    </Button>
+                      {toggling[video.id] ? (
+                        <>
+                          <Loader2 size={14} className="animate-spin" />
+                          处理中...
+                        </>
+                      ) : (
+                        <>
+                          {video.isPublic ? (
+                            <>
+                              <Globe size={14} />
+                              已开放
+                            </>
+                          ) : (
+                            <>
+                              <Lock size={14} />
+                              未开放
+                            </>
+                          )}
+                        </>
+                      )}
+                    </button>
                   )}
-                </CardFooter>
-              </Card>
+                </div>
+              </div>
             ))}
           </div>
         )}
       </div>
+      
+      {/* 视频播放弹窗 */}
+      {playingVideo && (
+        <div 
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => setPlayingVideo(null)}
+        >
+          <div 
+            className="relative w-full max-w-4xl aspect-video bg-black rounded-lg overflow-hidden shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setPlayingVideo(null)}
+              className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-md text-white flex items-center justify-center transition-colors"
+            >
+              <XCircle size={24} />
+            </button>
+            <video
+              src={myVideos.find(v => v.id === playingVideo)?.url}
+              controls
+              autoPlay
+              className="w-full h-full object-contain"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

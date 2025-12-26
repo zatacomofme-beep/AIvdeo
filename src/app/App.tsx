@@ -21,7 +21,6 @@ import { ContactUs } from './components/ContactUs';
 import { useStore } from './lib/store';
 import { api } from '../lib/api';
 import { ToastProvider, useToast } from './components/ui/toast';
-import { HeroUIProvider } from '@heroui/react';
 
 function AppContent() {
   const [activeTab, setActiveTab] = React.useState('video');
@@ -32,8 +31,18 @@ function AppContent() {
   const [showTerms, setShowTerms] = React.useState(false);
   const [showContact, setShowContact] = React.useState(false);
   
-  const { login, register, logout, addCredits, loadUserData } = useStore();
+  const { user, isLoggedIn, login, register, logout, addCredits, loadUserData } = useStore();
   const toast = useToast();
+
+  // 新增：应用启动时，如果用户已登录，自动重新加载数据
+  React.useEffect(() => {
+    if (isLoggedIn && user?.id) {
+      console.log('[应用启动] 检测到用户已登录，重新加载数据...');
+      loadUserData(user.id).then(() => {
+        console.log('[应用启动] 数据加载完成');
+      });
+    }
+  }, []); // 空依赖数组，只在组件挂载时执行一次
 
   const handleLogin = async (email: string, password: string) => {
     console.log('[handleLogin] 开始执行...');
@@ -215,10 +224,8 @@ function AppContent() {
 
 export default function App() {
   return (
-    <HeroUIProvider>
-      <ToastProvider>
-        <AppContent />
-      </ToastProvider>
-    </HeroUIProvider>
+    <ToastProvider>
+      <AppContent />
+    </ToastProvider>
   );
 }

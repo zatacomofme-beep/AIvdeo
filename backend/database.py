@@ -140,6 +140,7 @@ class Video(Base):
     prompt = Column(Text)  # 生成提示词
     script = Column(Text)  # 脚本内容
     product_name = Column(String(200))
+    product_category = Column(String(100))  # 新增：商品类目
     
     # 任务信息
     task_id = Column(String(100), index=True)  # Sora任务ID

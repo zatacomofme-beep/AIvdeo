@@ -664,57 +664,6 @@ export const api = {
     }
   },
 
-  /**
-   * 更新商品
-   */
-  async updateProduct(productId: string, params: {
-    name: string;
-    category: string;
-    usage: string;
-    sellingPoints: string;
-    imageUrls: string[];
-  }): Promise<{
-    success: boolean;
-    product: any;
-  }> {
-    console.log('[API] 更新商品:', productId);
-    console.log('[API] 请求参数:', params);
-    
-    try {
-      // 将字段映射为后端期望的格式
-      const requestBody = {
-        name: params.name,
-        category: params.category,
-        description: params.usage,  // usage 映射为 description
-        selling_points: params.sellingPoints ? [params.sellingPoints] : [],  // 转为数组
-        images: params.imageUrls  // imageUrls 映射为 images
-      };
-      
-      console.log('[API] 转换后的请求体:', requestBody);
-      
-      const response = await fetch(`${API_BASE_URL}/api/products/${productId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        console.error('[API] 更新商品失败:', error);
-        throw new Error(error.detail || '更新商品失败');
-      }
-
-      const result = await response.json();
-      console.log('[API] 更新商品成功:', result);
-      return result;
-    } catch (error) {
-      console.error('更新商品失败:', error);
-      throw error;
-    }
-  },
-
   // 获取用户的所有商品
   async getUserProducts(user_id: string): Promise<{
     products: Array<{
@@ -916,120 +865,47 @@ export const api = {
   },
 
   /**
-   * 保存提示词
+   * 删除视频
    */
-  async savePrompt(data: {
-    user_id: string;
-    content: string;
-    product_name: string;
-  }): Promise<{
+  async deleteVideo(videoId: string): Promise<{
     success: boolean;
-    prompt: any;
+    message: string;
   }> {
-    console.log('[API] 保存提示词...');
+    console.log('[API] 删除视频...', videoId);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/prompts`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-      });
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || '保存提示词失败');
-      }
-      return await response.json();
-    } catch (error) {
-      console.error('保存提示词失败:', error);
-      throw error;
-    }
-  },
-
-  /**
-   * 删除提示词
-   */
-  async deletePrompt(promptId: string): Promise<{
-    success: boolean;
-  }> {
-    console.log('[API] 删除提示词...');
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/prompts/${promptId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/videos/${videoId}`, {
         method: 'DELETE',
       });
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.detail || '删除提示词失败');
+        throw new Error(error.detail || '删除视频失败');
       }
       return await response.json();
     } catch (error) {
-      console.error('删除提示词失败:', error);
+      console.error('删除视频失败:', error);
       throw error;
     }
   },
 
   /**
-   * 更新用户信息
+   * 切换视频公开状态
    */
-  async updateUser(userId: string, data: {
-    username?: string;
-  }): Promise<{
+  async toggleVideoPublic(videoId: string, isPublic: boolean): Promise<{
     success: boolean;
-    user: any;
+    message: string;
   }> {
-    console.log('[API] 更新用户信息...');
+    console.log(`[API] 切换视频${videoId}公开状态:`, isPublic);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/users/${userId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/admin/video/${videoId}/public?isPublic=${isPublic}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
       });
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.detail || '更新用户信息失败');
+        throw new Error(error.detail || '切换公开状态失败');
       }
       return await response.json();
     } catch (error) {
-      console.error('更新用户信息失败:', error);
-      throw error;
-    }
-  },
-
-  /**
-   * 保存视频到数据库
-   */
-  async saveVideo(data: {
-    user_id: string;
-    video_url: string;
-    thumbnail_url?: string;
-    script: string;
-    product_name?: string;
-    status: string;
-    task_id?: string;
-    progress?: number;
-    is_public?: boolean;
-  }): Promise<{
-    success: boolean;
-    video: any;
-  }> {
-    console.log('[API] 保存视频...');
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/videos`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-      });
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || '保存视频失败');
-      }
-      return await response.json();
-    } catch (error) {
-      console.error('保存视频失败:', error);
+      console.error('切换公开状态失败:', error);
       throw error;
     }
   }

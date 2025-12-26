@@ -1,5 +1,3 @@
-import { heroui } from "@heroui/react";
-
 /** @type {import('tailwindcss').Config} */
 // 商务科技风配置 - Business Tech Style (参考 Linear, Vercel)
 export default {
@@ -108,19 +106,5 @@ export default {
             }
         }
     },
-    plugins: [
-        require("tailwindcss-animate"),
-        heroui({
-            themes: {
-                light: {
-                    colors: {
-                        primary: {
-                            DEFAULT: "#0ea5e9",
-                            foreground: "#ffffff",
-                        },
-                    },
-                },
-            },
-        }),
-    ],
+    plugins: [require("tailwindcss-animate")],
 }

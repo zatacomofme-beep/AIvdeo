@@ -34,3 +34,37 @@
 .btn-tech-ai {
   @apply bg-sky-500 text-white hover:bg-sky-600 active:scale-[0.98] shadow-sm shadow-sky-500/20 hover:shadow-md hover:shadow-sky-500/30 transition-all duration-200 font-medium rounded-md px-4 py-2;
 }
+
+/* Tech Colors */
+.bg-tech {
+  @apply bg-[#F97316];
+}
+
+.bg-tech-hover {
+  @apply bg-[#EA580C];
+}
+
+.bg-tech-light {
+  @apply bg-[#FED7AA];
+}
+
+.border-tech {
+  @apply border-[#F97316];
+}
+
+.text-tech {
+  @apply text-[#F97316];
+}
+
+/* Tech Shadows */
+.shadow-tech-sm {
+  @apply shadow-sm shadow-orange-200;
+}
+
+.shadow-tech-glow {
+  @apply shadow-lg shadow-orange-300/50;
+}
+
+.hover\:border-tech\/50:hover {
+  border-color: rgba(249, 115, 22, 0.5);
+}

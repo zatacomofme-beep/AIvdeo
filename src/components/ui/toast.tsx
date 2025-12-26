@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { X, CheckCircle2, XCircle, AlertCircle, Info } from 'lucide-react';
-import { cn } from '../../lib/utils';
-import { registerToastHandler } from '../../lib/toast-utils';
+import { cn } from './utils';
+import { registerToastHandler } from '../../app/lib/toast-utils';
 
 type ToastType = 'success' | 'error' | 'warning' | 'info';
 

@@ -36,10 +36,11 @@ export interface GeneratedVideo {
   script: string;
   productName: string;
   createdAt: number;
-  status: 'processing' | 'completed' | 'failed';  // 新增：视频状态
-  taskId?: string;  // 新增：任务ID，用于轮询
-  progress?: number;  // 新增：生成进度 0-100
-  error?: string;  // 新增：错误信息
+  status: 'processing' | 'completed' | 'failed';  // 新增:视频状态
+  taskId?: string;  // 新增:任务ID，用于轮询
+  progress?: number;  // 新增:生成进度 0-100
+  error?: string;  // 新增:错误信息
+  isPublic?: boolean;  // 新增:是否公开到内容广场
 }
 
 export interface SavedPrompt {
@@ -136,7 +137,8 @@ interface AppStore {
   
   // My Assets actions
   addGeneratedVideo: (videoData: Omit<GeneratedVideo, 'id' | 'createdAt'>) => Promise<string>;
-  updateVideoStatus: (videoId: string, updates: Partial<GeneratedVideo>) => void;  // 新增：更新视频状态
+  updateVideoStatus: (videoId: string, updates: Partial<GeneratedVideo>) => void;  // 新增:更新视频状态
+  toggleVideoPublic: (videoId: string, isPublic: boolean) => Promise<void>;  // 新增:切换视频公开状态
   deleteVideo: (videoId: string) => void;
   savePrompt: (prompt: Omit<SavedPrompt, 'id' | 'createdAt'>) => void;
   updatePrompt: (promptId: string, content: string) => void;  // 新增：更新提示词
@@ -362,9 +364,49 @@ export const useStore = create<AppStore>()(persist((set) => ({
     )
   })),
   
-  deleteVideo: (videoId) => set((state) => ({
-    myVideos: state.myVideos.filter(v => v.id !== videoId)
-  })),
+  toggleVideoPublic: async (videoId, isPublic) => {
+    const state = useStore.getState();
+    if (!state.user?.id) {
+      alert('请先登录');
+      return;
+    }
+    
+    try {
+      const { api } = await import('../../lib/api');
+      await api.toggleVideoPublic(videoId, isPublic);
+      
+      // 更新本地状态
+      set((state) => ({
+        myVideos: state.myVideos.map(video => 
+          video.id === videoId ? { ...video, isPublic } : video
+        )
+      }));
+      
+      console.log(`✅ 视频${isPublic ? '已开放' : '已关闭'}到内容广场`);
+    } catch (error) {
+      console.error('切换视频公开状态失败:', error);
+      alert('操作失败，请重试');
+      throw error;
+    }
+  },
+  
+  deleteVideo: async (videoId) => {
+    try {
+      const { api } = await import('../../lib/api');
+      await api.deleteVideo(videoId);  // 调用后端API删除数据库记录
+      set((state) => ({
+        myVideos: state.myVideos.filter(v => v.id !== videoId)
+      }));
+      console.log('✅ 视频已从数据库删除');
+    } catch (error) {
+      console.error('删除视频失败:', error);
+      // 失败时也从本地删除，避免界面不一致
+      set((state) => ({
+        myVideos: state.myVideos.filter(v => v.id !== videoId)
+      }));
+      alert('删除视频失败，请重试');
+    }
+  },
   
   savePrompt: async (promptData) => {
     const state = useStore.getState();

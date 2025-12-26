@@ -5,7 +5,6 @@ import { cn } from '../lib/utils';
 import { api } from '../../lib/api';
 import { CharacterSelector } from './CharacterSelector';
 import { showToast } from '../lib/toast-utils';
-import { Button, Input, Textarea, Select, SelectItem, Progress, Chip, Card, CardBody } from '@heroui/react';
 
 const API_BASE_URL = 'https://semopic.com';
 
@@ -47,6 +46,7 @@ export function DirectorPanel() {
   // 视频任务轮询状态
   const [videoTaskId, setVideoTaskId] = useState<string | null>(null);
   const [videoProgress, setVideoProgress] = useState(0);
+  const [tempSelectedProduct, setTempSelectedProduct] = useState<typeof savedProducts[0] | null>(null);  // 新增：临时选中的商品
   
   // Step 1: Product Info
   const [productForm, setProductForm] = useState({
@@ -61,16 +61,25 @@ export function DirectorPanel() {
     country: videoConfig?.country || '',
     language: videoConfig?.language || '',
     style: videoConfig?.style || '', // 新增：视频风格
-    orientation: videoConfig?.orientation || 'vertical' as 'vertical' | 'horizontal',
+    orientation: videoConfig?.orientation || 'vertical' as 'horizontal' | 'vertical',  // ✅ 使用vertical/horizontal
     resolution: videoConfig?.resolution || '1080p' as '720p' | '1080p',
     duration: videoConfig?.duration || '15s' as '15s' | '25s'
   });
 
-  // 选中商品的处理
+  // 选中商品的处理（修改：不立即跳转）
   const handleSelectProduct = (product: typeof savedProducts[0]) => {
-    setCurrentProduct(product);
-    setUploadedImages(product.imageUrls);
-    setCurrentStep(2);  // 直接跳到选择角色
+    setTempSelectedProduct(product);  // 只是临时选中，不跳转
+  };
+  
+  // 点击下一步时才确认选择
+  const handleConfirmProduct = () => {
+    if (!tempSelectedProduct) {
+      alert('请先选择一个商品');
+      return;
+    }
+    setCurrentProduct(tempSelectedProduct);
+    setUploadedImages(tempSelectedProduct.imageUrls);
+    setCurrentStep(2);  // 跳到选择角色
   };
 
   const handleSaveConfig = () => {
@@ -200,18 +209,11 @@ export function DirectorPanel() {
         return;
       }
       
-      // 转换 orientation 参数：前端使用 vertical/horizontal，API需要 portrait/landscape
-      const orientationMapping: { [key: string]: string } = {
-        'vertical': 'portrait',
-        'horizontal': 'landscape'
-      };
-      const apiOrientation = orientationMapping[configForm.orientation] || 'portrait';
-      
       // 调用后端API生成视频
       const result = await api.generateVideo(
         script,  // prompt
         uploadedImages || [],  // images
-        apiOrientation,  // orientation (portrait/landscape)
+        configForm.orientation,  // orientation (portrait/landscape)
         configForm.resolution === '720p' ? 'small' : 'large',  // size
         duration  // duration
       );
@@ -219,12 +221,13 @@ export function DirectorPanel() {
       // 立即添加到视频列表
       const videoId = addGeneratedVideo({
         url: result.url || '',
-        thumbnail: uploadedImages[0] || '',
+        thumbnail: uploadedImages[0] || '',  // 使用第一张图作为缩略图
         script: script,
         productName: currentProduct?.name || '未命名产品',
-        status: result.status === 'completed' ? 'completed' : 'processing',
+        // 修复：如果有URL且状态是completed，则设为completed；否则设为processing
+        status: (result.status === 'completed' && result.url) ? 'completed' : 'processing',
         taskId: result.task_id,
-        progress: 0
+        progress: (result.status === 'completed' && result.url) ? 100 : 0
       });
       
       if (result.status === 'completed' && result.url) {
@@ -275,6 +278,7 @@ export function DirectorPanel() {
       setGenerating(false);
     }
   };
+  
 
   // 轮询视频生成状态
   const pollVideoStatus = async (taskId: string) => {
@@ -318,29 +322,29 @@ export function DirectorPanel() {
   ];
 
   return (
-    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 animate-in fade-in duration-300">
-      <div className="w-[700px] max-h-[90vh] tech-card flex flex-col shadow-tech-lg rounded-lg overflow-hidden bg-white">
+    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 animate-in fade-in duration-300 p-4">
+      <div className="w-full max-w-6xl h-[calc(100vh-2rem)] tech-card flex flex-col shadow-tech-lg rounded-lg overflow-hidden bg-white">
         {/* Header */}
-        <div className="h-20 flex items-center justify-between px-8 border-b border-slate-100 shrink-0 bg-white/60 backdrop-blur-md">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-tech rounded-md flex items-center justify-center shadow-tech-sm text-white">
-              <Sparkles size={24} />
+        <div className="h-16 flex items-center justify-between px-6 border-b border-slate-100 shrink-0 bg-white/60 backdrop-blur-md">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-tech rounded-md flex items-center justify-center shadow-tech-sm text-white">
+              <Sparkles size={20} />
             </div>
             <div>
-              <h2 className="font-bold text-xl text-slate-800">AI 视频导演</h2>
-              <p className="text-xs text-slate-500 mt-1">智能创作专业视频分镜与脚本</p>
+              <h2 className="font-bold text-lg text-slate-800">AI 视频导演</h2>
+              <p className="text-xs text-slate-500">智能创作专业视频分镜与脚本</p>
             </div>
           </div>
           <button
             onClick={() => setShowDirector(false)}
             className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-all"
           >
-            <X size={24} />
+            <X size={20} />
           </button>
         </div>
 
         {/* Steps Indicator */}
-        <div className="px-8 py-6 border-b border-slate-100 bg-slate-50/50">
+        <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
           <div className="flex items-center justify-between relative">
             {/* Connecting Line Background */}
             <div className="absolute top-1/2 left-0 w-full h-0.5 bg-slate-200 -z-10" />
@@ -371,10 +375,8 @@ export function DirectorPanel() {
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-8 custom-scrollbar relative">
-          {/* Decorative diffuse elements inside panel */}
-
-
+        <div className="flex-1 overflow-y-auto custom-scrollbar relative">
+          <div className="max-w-5xl mx-auto px-6 py-6">
           {/* Step 1: Select Product */}
           {currentStep === 1 && (
             <div className="space-y-6 relative z-10 animate-in slide-in-from-right-10 duration-500">
@@ -393,14 +395,14 @@ export function DirectorPanel() {
                       <ShoppingBag size={16} className="text-yellow-500" />
                       选择商品
                     </label>
-                    <div className="grid grid-cols-3 gap-3 max-h-[400px] overflow-y-auto custom-scrollbar pr-1">
+                    <div className="grid grid-cols-4 gap-3 max-h-[520px] overflow-y-auto custom-scrollbar pr-1">
                       {savedProducts.map((product) => (
                         <button
                           key={product.id}
                           onClick={() => handleSelectProduct(product)}
                           className={cn(
                             "group relative p-3 bg-white border-2 rounded-xl transition-all duration-200 text-left overflow-hidden",
-                            currentProduct?.id === product.id 
+                            tempSelectedProduct?.id === product.id 
                               ? "border-yellow-400 shadow-lg shadow-yellow-100" 
                               : "border-slate-200 hover:border-yellow-400 hover:shadow-md"
                           )}
@@ -417,7 +419,7 @@ export function DirectorPanel() {
                           )}
                           
                           {/* 选中标记 */}
-                          {currentProduct?.id === product.id && (
+                          {tempSelectedProduct?.id === product.id && (
                             <div className="absolute top-2 right-2 w-5 h-5 bg-yellow-400 rounded-full flex items-center justify-center">
                               <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
                                 <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
@@ -458,19 +460,19 @@ export function DirectorPanel() {
                   </div>
 
                   {/* 已选中商品的详情预览 */}
-                  {currentProduct && (
+                  {tempSelectedProduct && (
                     <div className="glass p-4 rounded-xl border border-green-200 bg-green-50/50">
                       <div className="flex items-start gap-4">
-                        {currentProduct.imageUrls && currentProduct.imageUrls[0] && (
+                        {tempSelectedProduct.imageUrls && tempSelectedProduct.imageUrls[0] && (
                           <img 
-                            src={currentProduct.imageUrls[0]} 
-                            alt={currentProduct.name}
+                            src={tempSelectedProduct.imageUrls[0]} 
+                            alt={tempSelectedProduct.name}
                             className="w-20 h-20 object-cover rounded-lg border-2 border-green-200"
                           />
                         )}
                         <div className="flex-1">
-                          <h4 className="font-bold text-green-900 mb-1">已选中：{currentProduct.name}</h4>
-                          <p className="text-xs text-green-700 line-clamp-2">{currentProduct.sellingPoints}</p>
+                          <h4 className="font-bold text-green-900 mb-1">已选中：{tempSelectedProduct.name}</h4>
+                          <p className="text-xs text-green-700 line-clamp-2">{tempSelectedProduct.sellingPoints}</p>
                         </div>
                       </div>
                     </div>
@@ -494,7 +496,7 @@ export function DirectorPanel() {
                     创建第一个商品
                   </button>
                 </div>
-              )}
+              )}  
             </div>
           )}
 
@@ -518,7 +520,7 @@ export function DirectorPanel() {
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-2 gap-5">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">
                     投放国家 <span className="text-red-500">*</span>
@@ -630,7 +632,7 @@ export function DirectorPanel() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-2 gap-5">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-3">
                     分辨率
@@ -733,20 +735,21 @@ export function DirectorPanel() {
                 </div>
               </div>
 
+              {/* 脚本编辑器 */}
               <div className="relative">
-                <label className="block text-sm font-medium text-slate-700 mb-2">
+                <label className="block text-sm font-medium text-slate-700 mb-3">
                   脚本编辑器 <span className="text-red-500">*</span>
                 </label>
+                
                 <div className="relative group">
-                    <textarea
-                      value={script}
-                      onChange={(e) => setScript(e.target.value)}
-                      placeholder="等待生成或手动输入脚本..."
-                      rows={15}
-                      className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-md text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-tech focus:ring-2 focus:ring-tech/20 transition-all font-mono text-sm leading-relaxed custom-scrollbar"
-                    />
-                    {/* Glow effect on focus/hover */}
-                    <div className="absolute inset-0 rounded-md pointer-events-none border border-tech/0 group-hover:border-tech/20 transition-colors" />
+                  <textarea
+                    value={script}
+                    onChange={(e) => setScript(e.target.value)}
+                    placeholder="等待生成或手动输入脚本..."
+                    rows={15}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-md text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-tech focus:ring-2 focus:ring-tech/20 transition-all font-mono text-xs leading-relaxed custom-scrollbar"
+                  />
+                  <div className="absolute inset-0 rounded-md pointer-events-none border border-tech/0 group-hover:border-tech/20 transition-colors" />
                 </div>
                 
                 <div className="flex justify-between items-center mt-3 px-1">
@@ -765,10 +768,11 @@ export function DirectorPanel() {
               </div>
             </div>
           )}
+          </div>
         </div>
 
         {/* Footer */}
-        <div className="px-8 py-5 border-t border-slate-100 bg-slate-50/80 backdrop-blur-md shrink-0">
+        <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/80 backdrop-blur-md shrink-0">
           <div className="flex items-center justify-between gap-3">
             {/* Back Button */}
             {currentStep > 1 && (
@@ -808,18 +812,14 @@ export function DirectorPanel() {
                 onClick={() => {
                   console.log('Next button clicked, currentStep:', currentStep);
                   if (currentStep === 1) {
-                    if (!currentProduct) {
-                      alert('请先选择一个商品');
-                      return;
-                    }
-                    setCurrentStep(2);
+                    handleConfirmProduct();  // 使用新的确认函数
                   } else if (currentStep === 2) {
                     setCurrentStep(3);
                   } else if (currentStep === 3) {
                     handleSaveConfig();
                   }
                 }}
-                disabled={currentStep === 1 && !currentProduct}
+                disabled={currentStep === 1 && !tempSelectedProduct}
                 className="btn-tech-ai px-8 py-3 font-bold flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 下一步
