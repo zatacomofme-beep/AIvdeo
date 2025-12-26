@@ -51,6 +51,7 @@ from config import settings
 from services import tos_service, credit_service, ai_service
 from routers.health import router as health_router
 from routers.user import router as user_router
+from routers.admin import router as admin_router
 
 # 加载环境变量
 load_dotenv()
@@ -302,12 +303,15 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="SoraDirector Backend", version="0.1.0", docs_url=None, redoc_url=None, openapi_url="/openapi.json", lifespan=lifespan)
 
-# 注册新架构路由（渐进式重构 - 阶段1&2）
+# 注册新架构路由（渐进式重构 - 阶段1&2&3）
 app.include_router(health_router, tags=["Health Check"])
 print("[ROUTER] ✅ 健康检查路由已注册: /api/health")
 
 app.include_router(user_router, tags=["User Management"])
 print("[ROUTER] ✅ 用户管理路由已注册: /api/register, /api/login, /api/user")
+
+app.include_router(admin_router, tags=["Admin Management"])
+print("[ROUTER] ✅ 管理员路由已注册: /api/admin/*")
 
 # CORS：开发阶段先全放开
 app.add_middleware(
