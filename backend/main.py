@@ -46,6 +46,11 @@ from prompts import (
 # 导入微信支付模块
 from wechat_pay import create_native_order, verify_callback_signature, query_order, decrypt_callback_resource
 
+# 导入新架构模块（渐进式重构）
+from config import settings
+from services import tos_service, credit_service, ai_service
+from routers.health import router as health_router
+
 # 加载环境变量
 load_dotenv()
 
@@ -295,6 +300,10 @@ async def lifespan(app: FastAPI):
     print("[DATABASE] 关闭数据库连接...")
 
 app = FastAPI(title="SoraDirector Backend", version="0.1.0", docs_url=None, redoc_url=None, openapi_url="/openapi.json", lifespan=lifespan)
+
+# 注册新架构路由（渐进式重构 - 阶段1）
+app.include_router(health_router, tags=["Health Check"])
+print("[ROUTER] ✅ 健康检查路由已注册: /health")
 
 # CORS：开发阶段先全放开
 app.add_middleware(
