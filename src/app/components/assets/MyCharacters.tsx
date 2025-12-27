@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Users, Plus, Trash2, Clock, Edit, X, Wand2, Loader2 } from 'lucide-react';
 import { useStore } from '../../lib/store';
 import { cn } from '../../lib/utils';
-import { showToast } from '../../lib/toast-utils';  // ✅ 导入 toast 工具
+import { toast } from '../../../lib/toast';
 const API_BASE_URL = 'https://semopic.com';
 
 export function MyCharacters() {
@@ -40,7 +40,7 @@ export function MyCharacters() {
   const handleAIGenerate = async () => {
     // 检查是否填写了4个必须参数
     if (!formData.country || !formData.ethnicity || !formData.age || !formData.gender) {
-      alert('请先填写国家、人种、年龄和性别！');
+      toast.warning('请先填写国家、人种、年龄和性别！');
       return;
     }
 
@@ -92,7 +92,7 @@ export function MyCharacters() {
       console.log('✅ AI生成成功，表单数据已更新');
     } catch (error) {
       console.error('AI生成角色失败:', error);
-      alert('❌ AI生成失败，请稍后重试');
+      toast.error('AI生成失败，请稍后重试');
     } finally {
       setIsGeneratingAI(false);
     }
@@ -101,7 +101,7 @@ export function MyCharacters() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.description) {
-      alert('请填写角色名称和描述');
+      toast.warning('请填写角色名称和描述');
       return;
     }
 
@@ -113,7 +113,7 @@ export function MyCharacters() {
     console.log('[MyCharacters] 登录状态:', currentIsLoggedIn);
     
     if (!currentIsLoggedIn || !currentUser) {
-      alert('请先登录后再创建角色！');
+      toast.warning('请先登录后再创建角色！');
       return;
     }
 
@@ -173,12 +173,11 @@ export function MyCharacters() {
       });
       setShowCreateModal(false);
       
-      // ✅ 使用 toast 替代 alert
-      showToast.success('角色创建成功', `角色ID: ${result.character_id}\n用户ID: ${currentUserId}`);
+      toast.success('角色创建成功！');
       
     } catch (error) {
       console.error('创建角色失败:', error);
-      alert(`❌ 创建角色失败\n\n${error instanceof Error ? error.message : '请稍后重试'}`);
+      toast.error(error instanceof Error ? error.message : '创建角色失败，请稍后重试');
     } finally {
       setIsGeneratingAI(false);
     }

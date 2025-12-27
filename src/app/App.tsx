@@ -1,4 +1,5 @@
 import React from 'react';
+import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
 import { MainWorkspace } from './components/MainWorkspace';
@@ -14,25 +15,24 @@ import { MyCharacters } from './components/assets/MyCharacters';
 import { ContentSquare } from './components/ContentSquare';
 import { AdminPanel } from './components/AdminPanel';
 import { NineGridGenerator } from './components/NineGridGenerator';
-import { Footer } from './components/Footer';
-import { PrivacyPolicy } from './components/PrivacyPolicy';
-import { TermsOfService } from './components/TermsOfService';
-import { ContactUs } from './components/ContactUs';
+import { Toaster } from 'sonner';
+
+import LandingPage from './components/LandingPage';
 import { useStore } from './lib/store';
 import { api } from '../lib/api';
 import { ToastProvider, useToast } from './components/ui/toast';
 
-function AppContent() {
+// 主应用组件（包含侧边栏等）
+function MainApp() {
   const [activeTab, setActiveTab] = React.useState('video');
   const [showLogin, setShowLogin] = React.useState(false);
   const [showUserCenter, setShowUserCenter] = React.useState(false);
   const [showRecharge, setShowRecharge] = React.useState(false);
-  const [showPrivacy, setShowPrivacy] = React.useState(false);
-  const [showTerms, setShowTerms] = React.useState(false);
-  const [showContact, setShowContact] = React.useState(false);
+
   
   const { user, isLoggedIn, login, register, logout, addCredits, loadUserData } = useStore();
   const toast = useToast();
+  const location = useLocation();
 
   // 新增：应用启动时，如果用户已登录，自动重新加载数据
   React.useEffect(() => {
@@ -43,6 +43,14 @@ function AppContent() {
       });
     }
   }, []); // 空依赖数组，只在组件挂载时执行一次
+
+  // 新增：检测URL参数，如果有showLogin=true，自动打开登录弹窗
+  React.useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('showLogin') === 'true' && !isLoggedIn) {
+      setShowLogin(true);
+    }
+  }, [location.search, isLoggedIn]);
 
   const handleLogin = async (email: string, password: string) => {
     console.log('[handleLogin] 开始执行...');
@@ -91,10 +99,10 @@ function AppContent() {
     }
   };
 
-  const handleRegister = async (email: string, password: string, username: string) => {
+  const handleRegister = async (email: string, password: string, username: string, verificationCode: string) => {
     try {
-      // 调用后端 API 进行注册
-      const response = await api.register({ email, password, username });
+      // 调用后端 API 进行注册，传入验证码
+      const response = await api.register({ email, password, username, verification_code: verificationCode });
       
       // 注册成功，保存用户信息到 store
       register(response.user);
@@ -165,12 +173,7 @@ function AppContent() {
           {renderContent()}
         </div>
 
-        {/* Footer */}
-        <Footer
-          onOpenPrivacy={() => setShowPrivacy(true)}
-          onOpenTerms={() => setShowTerms(true)}
-          onOpenContact={() => setShowContact(true)}
-        />
+
       </div>
 
       {/* AI Director Panel */}
@@ -201,31 +204,23 @@ function AppContent() {
         onRecharge={handleRecharge}
       />
 
-      {/* Privacy Policy */}
-      <PrivacyPolicy
-        isOpen={showPrivacy}
-        onClose={() => setShowPrivacy(false)}
-      />
 
-      {/* Terms of Service */}
-      <TermsOfService
-        isOpen={showTerms}
-        onClose={() => setShowTerms(false)}
-      />
-
-      {/* Contact Us */}
-      <ContactUs
-        isOpen={showContact}
-        onClose={() => setShowContact(false)}
-      />
     </div>
   );
 }
 
+// 路由配置
 export default function App() {
   return (
     <ToastProvider>
-      <AppContent />
+      <Toaster position="top-right" richColors closeButton />
+      <Routes>
+        {/* 官网首页 */}
+        <Route path="/" element={<LandingPage />} />
+        
+        {/* 主应用 */}
+        <Route path="/app" element={<MainApp />} />
+      </Routes>
     </ToastProvider>
   );
 }

@@ -1,19 +1,37 @@
-import { Play, Download, Trash2, Clock, Film, Loader2, CheckCircle2, XCircle, AlertTriangle, Globe, Lock } from 'lucide-react';
+import { Play, Download, Trash2, Clock, Film, Loader2, CheckCircle2, XCircle, AlertTriangle, Globe, Lock, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useStore } from "../../lib/store";
 import { cn } from "../../lib/utils";
 import { api } from '../../../lib/api';
 import { useEffect, useState } from 'react';
+import { toast } from '../../../lib/toast';
 
 export function MyVideos() {
   const { myVideos, deleteVideo, updateVideoStatus, toggleVideoPublic } = useStore();
   
   const [toggling, setToggling] = useState<{ [key: string]: boolean }>({});  // 新增：跟踪公开状态切换中
   const [playingVideo, setPlayingVideo] = useState<string | null>(null);  // 新增：当前播放的视频ID
+  
+  // 分页状态
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 9; // 每页显示9个视频
+  
+  // 计算分页数据
+  const totalPages = Math.ceil(myVideos.length / pageSize);
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
+  const currentVideos = myVideos.slice(startIndex, endIndex);
+  
+  // 当视频列表变化时，确保当前页面有效
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(totalPages);
+    }
+  }, [myVideos.length, totalPages]);
 
   // 新增：播放视频
   const handlePlayVideo = (video: any) => {
     if (video.status !== 'completed' || !video.url) {
-      alert('视频尚未完成，无法播放');
+      toast.warning('视频尚未完成，无法播放');
       return;
     }
     setPlayingVideo(video.id);
@@ -22,7 +40,7 @@ export function MyVideos() {
   // 新增：切换视频公开状态
   const handleTogglePublic = async (video: any) => {
     if (video.status !== 'completed') {
-      alert('只有已完成的视频才能分享到内容广场');
+      toast.warning('只有已完成的视频才能分享到内容广场');
       return;
     }
 
@@ -31,7 +49,7 @@ export function MyVideos() {
     try {
       const newPublicStatus = !video.isPublic;
       await toggleVideoPublic(video.id, newPublicStatus);
-      alert(newPublicStatus ? '✅ 已开放到内容广场' : '✅ 已从内容广场移除');
+      toast.success(newPublicStatus ? '✅ 已开放到内容广场' : '✅ 已从内容广场移除');
     } catch (error) {
       console.error('切换公开状态失败:', error);
     } finally {
@@ -39,9 +57,12 @@ export function MyVideos() {
     }
   };
 
-  // 页面加载时查询一次处理中的视频状态
+  // 页面加载时查询一次处理中的视频状态，并设置定时轮询
   useEffect(() => {
     const checkProcessingVideos = async () => {
+      // ✅ 使用 useStore.getState() 获取最新状态，避免闭包问题
+      const { myVideos, updateVideoStatus } = useStore.getState();
+      
       const processingVideos = myVideos.filter(v => 
         v.status === 'processing' && v.taskId
       );
@@ -95,7 +116,22 @@ export function MyVideos() {
     
     // 组件加载时立即执行查询
     checkProcessingVideos();
-  }, []); // 空依赖数组，只在组件挂载时执行一次
+    
+    // ✅ 设置定时查询：每3分钟查询一次
+    const intervalId = setInterval(() => {
+      const { myVideos } = useStore.getState();
+      const processingCount = myVideos.filter(v => v.status === 'processing' && v.taskId).length;
+      if (processingCount > 0) {
+        console.log(`[定时查询] 发现 ${processingCount} 个处理中的视频，开始查询...`);
+        checkProcessingVideos();
+      } else {
+        console.log('[定时查询] 没有处理中的视频，跳过查询');
+      }
+    }, 3 * 60 * 1000); // 3分钟 = 180秒 = 180000毫秒
+    
+    // 组件卸载时清除定时器
+    return () => clearInterval(intervalId);
+  }, []); // ✅ 空依赖，只在组件挂载时执行一次，避免无限循环
 
   const formatDate = (timestamp: number) => {
     return new Date(timestamp).toLocaleString('zh-CN', {
@@ -136,31 +172,31 @@ export function MyVideos() {
 
   return (
     <div className="flex-1 flex flex-col h-screen overflow-hidden bg-white">
-      <div className="p-8 pb-4 border-b border-slate-200">
-        <h2 className="text-3xl font-semibold text-slate-900 flex items-center gap-3">
-          <Film className="text-tech" size={32} />
+      <div className="p-5 pb-3 border-b border-slate-200">
+        <h2 className="text-2xl font-semibold text-slate-900 flex items-center gap-2">
+          <Film className="text-tech" size={28} />
           我的视频
           <span className="badge-tech ml-2">
             {myVideos.length}
           </span>
         </h2>
-        <p className="text-slate-600 mt-2 text-sm">管理您生成的所有 AI 视频作品</p>
+        <p className="text-slate-600 mt-1 text-sm">管理您生成的所有 AI 视频作品</p>
         
         {/* 3天有效期提醒 */}
-        <div className="mt-4 tech-card p-4 bg-amber-50 border-amber-300">
-          <AlertTriangle className="text-amber-600 flex-shrink-0 mt-0.5" size={20} />
+        <div className="mt-3 tech-card p-3 bg-amber-50 border-amber-300">
+          <AlertTriangle className="text-amber-600 flex-shrink-0 mt-0.5" size={18} />
           <div className="flex-1">
-            <h3 className="text-sm font-semibold text-amber-900 mb-1">重要提醒</h3>
-            <p className="text-sm text-amber-700">
+            <h3 className="text-xs font-semibold text-amber-900 mb-0.5">重要提醒</h3>
+            <p className="text-xs text-amber-700">
               受限于当前的测试环境，视频的保存时间只有 <span className="font-bold">3天</span>，生成成功的视频请在3天内下载保存到本地。
             </p>
           </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-8 pt-0 custom-scrollbar bg-slate-50">
+      <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
         {myVideos.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-slate-400">
+          <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
             <div className="w-20 h-20 bg-slate-100 rounded-lg flex items-center justify-center mb-4 border border-slate-200">
               <Film size={40} className="text-slate-300" />
             </div>
@@ -168,8 +204,11 @@ export function MyVideos() {
             <p className="text-sm mt-2">快去 AI 导演创作您的第一个视频吧</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
-            {myVideos.map((video) => (
+          <>
+            {/* 视频网格 - 不滚动 */}
+            <div className="p-6">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
+                {currentVideos.map((video) => (
               <div 
                 key={video.id} 
                 className="tech-card group relative overflow-hidden hover:shadow-tech-md transition-all"
@@ -229,8 +268,8 @@ export function MyVideos() {
                 </div>
 
                 {/* Info */}
-                <div className="p-4 border-t border-slate-100 bg-white">
-                  <h3 className="font-semibold text-slate-900 truncate mb-1" title={video.productName}>
+                <div className="p-3 border-t border-slate-100 bg-white">
+                  <h3 className="font-medium text-sm text-slate-900 truncate mb-1" title={video.productName}>
                     {video.productName}
                   </h3>
                   <div className="flex items-center justify-between text-xs text-slate-500">
@@ -297,6 +336,47 @@ export function MyVideos() {
               </div>
             ))}
           </div>
+        </div>
+        
+        {/* 分页控制器 */}
+        {totalPages > 1 && (
+          <div className="border-t border-slate-200 px-6 py-3 bg-white">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-slate-600">
+                第 {currentPage} / {totalPages} 页 · 共 {myVideos.length} 个视频
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                  disabled={currentPage === 1}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1 transition-colors",
+                    currentPage === 1
+                      ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                      : "bg-purple-100 text-purple-700 hover:bg-purple-200"
+                  )}
+                >
+                  <ChevronLeft size={16} />
+                  上一页
+                </button>
+                <button
+                  onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                  disabled={currentPage === totalPages}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1 transition-colors",
+                    currentPage === totalPages
+                      ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                      : "bg-purple-100 text-purple-700 hover:bg-purple-200"
+                  )}
+                >
+                  下一页
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        </>
         )}
       </div>
       

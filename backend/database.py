@@ -144,9 +144,13 @@ class Video(Base):
     
     # 任务信息
     task_id = Column(String(100), index=True)  # Sora任务ID
-    status = Column(String(20), default='processing')  # processing, completed, failed
+    status = Column(String(20), default='processing')  # processing, completed, failed, url_expired
     progress = Column(Integer, default=0)  # 0-100
     error = Column(Text)  # 错误信息
+    
+    # URL有效期管理
+    url_expires_at = Column(DateTime)  # URL过期时间（云雾URL 3天有效）
+    last_url_check = Column(DateTime)  # 最后一次URL有效性检查时间
     
     # 视频配置
     orientation = Column(String(20))  # portrait, landscape
@@ -240,6 +244,39 @@ class GeneratedImage(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class FeaturedVideo(Base):
+    """精选视频表 - 用于官网展示的精选案例"""
+    __tablename__ = "featured_videos"
+    
+    id = Column(String(36), primary_key=True)
+    
+    # 视频基本信息
+    title = Column(String(200), nullable=False)  # 视频标题（如 "Nike Air Max"）
+    subtitle = Column(String(200))  # 副标题（如 "运动鞋服 / TikTok"）
+    video_url = Column(Text, nullable=False)  # TOS视频URL
+    thumbnail_url = Column(Text, nullable=False)  # 缩略图URL
+    
+    # 分类和标签
+    category = Column(String(100), nullable=False, index=True)  # 美妆护肤、3C数码、服装鞋帽等
+    tags = Column(JSON)  # ["护肤", "TikTok", "爆款"]
+    
+    # 展示顺序和状态
+    display_order = Column(Integer, default=0)  # 显示顺序（数字越小越靠前）
+    is_active = Column(Boolean, default=True)  # 是否在官网展示
+    
+    # 统计数据（可选）
+    view_count = Column(Integer, default=0)  # 播放次数
+    like_count = Column(Integer, default=0)  # 点赞数
+    
+    # 元数据
+    product_name = Column(String(200))  # 商品名称
+    platform = Column(String(50))  # 投放平台（TikTok/Reels/Shorts）
+    description = Column(Text)  # 详细描述
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 # ======================
 # 数据库工具函数
 # ======================
@@ -268,6 +305,7 @@ def init_database():
         print("  - saved_prompts (提示词表)")
         print("  - credit_history (积分历史表)")
         print("  - generated_images (九宫格图片表)")
+        print("  - featured_videos (精选视频表)")
         return True
     except Exception as e:
         print(f"[DATABASE] ✗ 创建数据库表失败: {e}")

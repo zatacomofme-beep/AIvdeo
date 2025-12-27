@@ -57,9 +57,12 @@ import asyncio
 import requests
 import base64
 import bcrypt  # 新增：密码加密
-from typing import Any, List, Optional
+import random
+import string
+from typing import Any, List, Optional, Union
 from io import BytesIO
-from datetime import datetime
+from datetime import datetime, timedelta
+
 
 import boto3
 from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, Request
@@ -76,7 +79,7 @@ from sqlalchemy.orm import Session
 # 导入数据库模块
 from database import (
     get_db, test_connection, init_database,
-    User, Product, Project, Video, Character, SavedPrompt, CreditHistory, GeneratedImage
+    User, Product, Project, Video, Character, SavedPrompt, CreditHistory, GeneratedImage, FeaturedVideo
 )
 
 # 导入prompt配置
@@ -216,6 +219,73 @@ print("  - 角色创建：支持sora-2-characters模型")
 print("[SERVER INFO] API Endpoints: /upload-image, /generate-script, /generate-video, /query-video-task, /create-character")
 print("="*80)
 
+# ======================
+# 邮箱验证码配置
+# ======================
+
+# 验证码存储（内存，生产环境建议使用Redis）
+verification_codes = {}
+
+# 邮件配置
+SMTP_HOST = os.getenv("SMTP_HOST", "smtp.qq.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER = os.getenv("SMTP_USER", "")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+SENDER_EMAIL = os.getenv("SENDER_EMAIL", SMTP_USER)
+SENDER_NAME = os.getenv("SENDER_NAME", "SemoPic AI视频平台")
+
+def generate_verification_code():
+    """生成6位数字验证码"""
+    return ''.join(random.choices(string.digits, k=6))
+
+def send_verification_email(email: str, code: str):
+    """发送验证码邮件"""
+    if not SMTP_USER or not SMTP_PASSWORD:
+        print("[邮件] SMTP未配置，验证码将打印到控制台")
+        print(f"[验证码] {email}: {code}")
+        return True
+    
+    try:
+        import smtplib
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+        
+        message = MIMEMultipart()
+        message['From'] = f"{SENDER_NAME} <{SENDER_EMAIL}>"
+        message['To'] = email
+        message['Subject'] = "【SemoPic】邮箱验证码"
+        
+        html_content = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; padding: 20px;">
+            <h2 style="color: #7c3aed;">SemoPic AI视频平台</h2>
+            <p>您好！</p>
+            <p>您的邮箱验证码是：</p>
+            <h1 style="color: #7c3aed; font-size: 32px; letter-spacing: 5px;">{code}</h1>
+            <p style="color: #666;">验证码有效期为10分钟，请及时使用。</p>
+            <p style="color: #999; font-size: 12px; margin-top: 30px;">
+                如果这不是您的操作，请忽略此邮件。
+            </p>
+        </body>
+        </html>
+        """
+        
+        message.attach(MIMEText(html_content, 'html'))
+        
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASSWORD)
+            server.send_message(message)
+        
+        print(f"[邮件] 验证码已发送到 {email}")
+        return True
+    except Exception as e:
+        print(f"[邮件] 发送失败: {e}")
+        print(f"[验证码] {email}: {code}")
+        import traceback
+        traceback.print_exc()
+        return False
+
 # AI 客户端（用于对话和视频生成）
 ai_client = None
 if LLM_API_KEY:
@@ -223,6 +293,21 @@ if LLM_API_KEY:
         api_key=LLM_API_KEY,
         base_url=f"{LLM_BASE_URL}/v1"  # 云雾API需要加 /v1 后缀
     )
+
+
+# ======================
+# 工具函数
+# ======================
+
+def to_beijing_timestamp(dt):
+    """
+    将datetime对象转换为北京时间戳（毫秒）
+    """
+    if dt is None:
+        return None
+    # datetime.timestamp() 返回 UTC 时间戳（秒），乘以 1000 得到毫秒
+    # 北京时间 = UTC + 8小时，但 timestamp() 本身已经是 UTC，所以直接转换即可
+    return int(dt.timestamp() * 1000)
 
 
 # ======================
@@ -1959,16 +2044,52 @@ async def create_character(req: CreateCharacterRequest, db: Session = Depends(ge
 # 用户认证 API
 # ======================
 
+class SendCodeRequest(BaseModel):
+    """发送验证码请求"""
+    email: str
+
 class RegisterRequest(BaseModel):
     """用户注册请求"""
     email: str
     password: str
     username: str
+    verification_code: str  # 新增：邮箱验证码
 
 class LoginRequest(BaseModel):
     """用户登录请求"""
     email: str
     password: str
+
+@app.post("/api/send-verification-code")
+async def send_verification_code(req: SendCodeRequest):
+    """
+    发送邮箱验证码
+    """
+    try:
+        email = req.email
+        
+        # 生成验证码
+        code = generate_verification_code()
+        
+        # 存储验证码（有效期10分钟）
+        expiry_time = datetime.now() + timedelta(minutes=10)
+        verification_codes[email] = {
+            "code": code,
+            "expiry": expiry_time
+        }
+        
+        # 发送邮件
+        send_verification_email(email, code)
+        
+        print(f"[验证码] 已发送到 {email}: {code}")
+        
+        return {
+            "success": True,
+            "message": "验证码已发送"
+        }
+    except Exception as e:
+        print(f"[验证码] 发送失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/register")
 async def register_user(req: RegisterRequest, db: Session = Depends(get_db)):
@@ -1976,6 +2097,27 @@ async def register_user(req: RegisterRequest, db: Session = Depends(get_db)):
     用户注册
     """
     try:
+        # 验证邮箱验证码
+        email = req.email
+        code = req.verification_code
+        
+        if email not in verification_codes:
+            raise HTTPException(status_code=400, detail="验证码已过期或未发送")
+        
+        stored_data = verification_codes[email]
+        
+        # 检查验证码是否过期
+        if datetime.now() > stored_data["expiry"]:
+            del verification_codes[email]
+            raise HTTPException(status_code=400, detail="验证码已过期")
+        
+        # 检查验证码是否正确
+        if code != stored_data["code"]:
+            raise HTTPException(status_code=400, detail="验证码错误")
+        
+        # 验证成功，删除验证码
+        del verification_codes[email]
+        
         # 检查邮箱是否已存在
         existing_user = db.query(User).filter(User.email == req.email).first()
         if existing_user:
@@ -2113,6 +2255,202 @@ async def get_public_videos(db: Session = Depends(get_db)):
     except Exception as e:
         print(f"获取公开视频失败: {e}")
         return {"videos": []}
+
+# ======================
+# 精选视频 API（用于官网展示）
+# ======================
+
+class FeaturedVideoRequest(BaseModel):
+    """创建/更新精选视频请求"""
+    title: str
+    subtitle: Optional[str] = None
+    video_url: str
+    thumbnail_url: str
+    category: str  # 美妆护肤、3C数码、服装鞋帽等
+    tags: Optional[List[str]] = None
+    display_order: Optional[int] = 0
+    is_active: Optional[bool] = True
+    product_name: Optional[str] = None
+    platform: Optional[str] = None  # TikTok/Reels/Shorts
+    description: Optional[str] = None
+
+@app.get("/api/featured-videos")
+async def get_featured_videos(
+    category: Optional[str] = None,
+    limit: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    获取精选视频列表（用于官网展示）
+    
+    Args:
+        category: 分类过滤（美妆护肤、3C数码、服装鞋帽等）
+        limit: 返回数量限制
+    """
+    try:
+        query = db.query(FeaturedVideo).filter(FeaturedVideo.is_active == True)
+        
+        # 分类过滤
+        if category:
+            query = query.filter(FeaturedVideo.category == category)
+        
+        # 按显示顺序排序
+        query = query.order_by(FeaturedVideo.display_order.asc())
+        
+        # 限制数量
+        if limit:
+            query = query.limit(limit)
+        
+        videos = query.all()
+        
+        return {
+            "success": True,
+            "videos": [
+                {
+                    "id": v.id,
+                    "title": v.title,
+                    "subtitle": v.subtitle,
+                    "videoUrl": v.video_url,
+                    "thumbnailUrl": v.thumbnail_url,
+                    "category": v.category,
+                    "tags": v.tags or [],
+                    "displayOrder": v.display_order,
+                    "viewCount": v.view_count,
+                    "likeCount": v.like_count,
+                    "productName": v.product_name,
+                    "platform": v.platform,
+                    "description": v.description,
+                    "createdAt": v.created_at.timestamp() * 1000 if v.created_at else None
+                }
+                for v in videos
+            ]
+        }
+    except Exception as e:
+        print(f"获取精选视频失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "videos": []}
+
+@app.get("/api/featured-videos/categories")
+async def get_featured_categories(db: Session = Depends(get_db)):
+    """
+    获取所有精选视频的分类列表
+    """
+    try:
+        from sqlalchemy import distinct
+        categories = db.query(distinct(FeaturedVideo.category)).filter(
+            FeaturedVideo.is_active == True
+        ).all()
+        
+        return {
+            "success": True,
+            "categories": [cat[0] for cat in categories if cat[0]]
+        }
+    except Exception as e:
+        print(f"获取分类失败: {e}")
+        return {"success": False, "categories": []}
+
+@app.post("/api/admin/featured-videos")
+async def create_featured_video(req: FeaturedVideoRequest, db: Session = Depends(get_db)):
+    """
+    创建精选视频（管理员功能）
+    """
+    try:
+        print(f"[创建精选视频] 收到请求: title={req.title}, category={req.category}, tags={req.tags}")
+        
+        video_id = str(uuid.uuid4())
+        
+        # 处理tags：如果为空或None，设置为空列表
+        tags_value = req.tags if req.tags else []
+        
+        new_video = FeaturedVideo(
+            id=video_id,
+            title=req.title,
+            subtitle=req.subtitle or "",
+            video_url=req.video_url,
+            thumbnail_url=req.thumbnail_url,
+            category=req.category,
+            tags=tags_value,
+            display_order=req.display_order or 0,
+            is_active=req.is_active if req.is_active is not None else True,
+            product_name=req.product_name or "",
+            platform=req.platform or "TikTok",
+            description=req.description or ""
+        )
+        
+        print(f"[创建精选视频] 准备插入: id={video_id}, tags={tags_value}")
+        
+        db.add(new_video)
+        db.commit()
+        db.refresh(new_video)
+        
+        print(f"[创建精选视频] 成功: id={video_id}")
+        
+        return {
+            "success": True,
+            "video": {
+                "id": new_video.id,
+                "title": new_video.title,
+                "videoUrl": new_video.video_url
+            }
+        }
+    except Exception as e:
+        db.rollback()
+        print(f"[创建精选视频] 失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/admin/featured-videos/{video_id}")
+async def update_featured_video(video_id: str, req: FeaturedVideoRequest, db: Session = Depends(get_db)):
+    """
+    更新精选视频（管理员功能）
+    """
+    try:
+        video = db.query(FeaturedVideo).filter(FeaturedVideo.id == video_id).first()
+        if not video:
+            raise HTTPException(status_code=404, detail="视频不存在")
+        
+        video.title = req.title
+        video.subtitle = req.subtitle
+        video.video_url = req.video_url
+        video.thumbnail_url = req.thumbnail_url
+        video.category = req.category
+        video.tags = req.tags
+        video.display_order = req.display_order or 0
+        video.is_active = req.is_active if req.is_active is not None else True
+        video.product_name = req.product_name
+        video.platform = req.platform
+        video.description = req.description
+        
+        db.commit()
+        return {"success": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"更新精选视频失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/admin/featured-videos/{video_id}")
+async def delete_featured_video(video_id: str, db: Session = Depends(get_db)):
+    """
+    删除精选视频（管理员功能）
+    """
+    try:
+        video = db.query(FeaturedVideo).filter(FeaturedVideo.id == video_id).first()
+        if not video:
+            raise HTTPException(status_code=404, detail="视频不存在")
+        
+        db.delete(video)
+        db.commit()
+        return {"success": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"删除精选视频失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/admin/stats")
 async def get_admin_stats(db: Session = Depends(get_db)):
@@ -2316,15 +2654,24 @@ class UpdateProductRequest(BaseModel):
 class SaveVideoRequest(BaseModel):
     user_id: str
     project_id: Optional[str] = None
-    video_url: str
+    video_url: Optional[str] = None  # ✅ 修复：允许为空，processing状态时没有URL
     thumbnail_url: Optional[str] = None
-    script: Optional[dict] = None
+    script: Optional[Union[dict, str]] = None  # ✅ 支持字典和字符串
     product_name: Optional[str] = None
     prompt: Optional[str] = None
     is_public: bool = False
     task_id: Optional[str] = None  # 新增：Sora任务ID
-    status: Optional[str] = 'completed'  # 新增：视频状态
+    status: Optional[str] = 'processing'  # ✅ 修复：默认为processing
     progress: Optional[int] = 0  # 新增：生成进度
+
+class UpdateVideoRequest(BaseModel):
+    """更新视频请求（所有字段可选）"""
+    video_url: Optional[str] = None
+    thumbnail_url: Optional[str] = None
+    script: Optional[Union[dict, str]] = None
+    product_name: Optional[str] = None
+    status: Optional[str] = None
+    progress: Optional[int] = None
 
 class SavePromptRequest(BaseModel):
     user_id: str
@@ -2394,7 +2741,15 @@ async def save_video(req: SaveVideoRequest, db: Session = Depends(get_db)):
     保存视频
     """
     try:
+        from datetime import timedelta
+        
         video_id = str(uuid.uuid4())
+        
+        # 计算URL过期时间（云雾URL 3天有效）
+        url_expires_at = None
+        if req.video_url and req.status == 'completed':
+            url_expires_at = datetime.utcnow() + timedelta(days=3)
+        
         new_video = Video(
             id=video_id,
             user_id=req.user_id,
@@ -2407,7 +2762,9 @@ async def save_video(req: SaveVideoRequest, db: Session = Depends(get_db)):
             status=req.status or 'completed',  # ✅ 使用前端传入的status
             is_public=req.is_public,
             task_id=req.task_id,  # ✅ 保存task_id
-            progress=req.progress or 0  # ✅ 保存progress
+            progress=req.progress or 0,  # ✅ 保存progress
+            url_expires_at=url_expires_at,  # 新增：设置URL过期时间
+            last_url_check=datetime.utcnow()  # 新增：设置最后检查时间
         )
         db.add(new_video)
         db.commit()
@@ -2421,10 +2778,11 @@ async def save_video(req: SaveVideoRequest, db: Session = Depends(get_db)):
                 "thumbnail": new_video.thumbnail_url,
                 "script": new_video.script,
                 "productName": new_video.product_name,
-                "status": new_video.status,  # ✅ 返回status
+                "status": new_video.status,  # ✅ 返图status
                 "isPublic": new_video.is_public,
                 "taskId": new_video.task_id,  # ✅ 返回taskId
                 "progress": new_video.progress or 0,  # ✅ 返回progress
+                "urlExpiresAt": new_video.url_expires_at.timestamp() * 1000 if new_video.url_expires_at else None,
                 "createdAt": new_video.created_at.timestamp() * 1000 if new_video.created_at else None
             }
         }
@@ -2442,11 +2800,22 @@ async def get_user_videos(user_id: str, db: Session = Depends(get_db)):
     """
     try:
         videos = db.query(Video).filter(Video.user_id == user_id).order_by(Video.created_at.desc()).all()
+        
+        # 检查URL是否过期
+        now = datetime.utcnow()
+        for video in videos:
+            if video.status == 'completed' and video.url_expires_at:
+                if now > video.url_expires_at:
+                    # URL已过期，更新状态
+                    video.status = 'url_expired'
+                    video.error = 'URL已失效（云雾URL有效期为3天）'
+                    db.commit()
+        
         return {
             "videos": [
                 {
                     "id": v.id,
-                    "url": v.video_url,
+                    "url": v.video_url if v.status != 'url_expired' else None,  # URL过期则返回None
                     "thumbnail": v.thumbnail_url,
                     "script": v.script,
                     "productName": v.product_name,
@@ -2455,6 +2824,7 @@ async def get_user_videos(user_id: str, db: Session = Depends(get_db)):
                     "taskId": v.task_id,  # ✅ 返回taskId
                     "progress": v.progress or 0,  # ✅ 返回progress
                     "error": v.error,  # ✅ 返回错误信息
+                    "urlExpiresAt": v.url_expires_at.timestamp() * 1000 if v.url_expires_at else None,
                     "createdAt": v.created_at.timestamp() * 1000 if v.created_at else None
                 }
                 for v in videos
@@ -2465,11 +2835,13 @@ async def get_user_videos(user_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.put("/api/videos/{video_id}")
-async def update_video(video_id: str, req: SaveVideoRequest, db: Session = Depends(get_db)):
+async def update_video(video_id: str, req: UpdateVideoRequest, db: Session = Depends(get_db)):
     """
     更新视频状态和URL（用于异步视频完成后的状态同步）
     """
     try:
+        from datetime import timedelta
+        
         video = db.query(Video).filter(Video.id == video_id).first()
         if not video:
             raise HTTPException(status_code=404, detail="视频不存在")
@@ -2477,6 +2849,10 @@ async def update_video(video_id: str, req: SaveVideoRequest, db: Session = Depen
         # 更新视频字段
         if req.video_url is not None:
             video.video_url = req.video_url
+            # 更新URL时，重新计算过期时间
+            if req.status == 'completed':
+                video.url_expires_at = datetime.utcnow() + timedelta(days=3)
+                video.last_url_check = datetime.utcnow()
         if req.thumbnail_url is not None:
             video.thumbnail_url = req.thumbnail_url
         if req.status is not None:
@@ -2503,6 +2879,7 @@ async def update_video(video_id: str, req: SaveVideoRequest, db: Session = Depen
                 "isPublic": video.is_public,
                 "taskId": video.task_id,
                 "progress": video.progress or 0,
+                "urlExpiresAt": video.url_expires_at.timestamp() * 1000 if video.url_expires_at else None,
                 "createdAt": video.created_at.timestamp() * 1000 if video.created_at else None
             }
         }
@@ -2606,6 +2983,56 @@ async def delete_prompt(prompt_id: str, db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         print(f"删除提示词失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ======================
+# 视频URL有效期管理 API
+# ======================
+
+@app.get("/api/videos/{video_id}/check-url")
+async def check_video_url(video_id: str, db: Session = Depends(get_db)):
+    """
+    检查视频URL是否有效
+    用于前端访问时验证URL是否过期（3天有效期）
+    """
+    try:
+        video = db.query(Video).filter(Video.id == video_id).first()
+        if not video:
+            raise HTTPException(status_code=404, detail="视频不存在")
+        
+        # 检查URL是否过期
+        now = datetime.utcnow()
+        is_expired = False
+        
+        if video.status == 'completed' and video.url_expires_at:
+            if now > video.url_expires_at:
+                # URL已过期
+                is_expired = True
+                video.status = 'url_expired'
+                video.error = 'URL已失效（云雾URL有效期为3天）'
+                video.last_url_check = now
+                db.commit()
+                
+        # 更新最后检查时间
+        video.last_url_check = now
+        db.commit()
+        
+        return {
+            "success": True,
+            "videoId": video.id,
+            "status": video.status,
+            "isExpired": is_expired,
+            "url": video.video_url if not is_expired else None,
+            "urlExpiresAt": video.url_expires_at.timestamp() * 1000 if video.url_expires_at else None,
+            "lastCheck": video.last_url_check.timestamp() * 1000 if video.last_url_check else None,
+            "message": "URL已失效，请重新生成视频" if is_expired else "URL有效"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"检查URL失败: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 # ======================

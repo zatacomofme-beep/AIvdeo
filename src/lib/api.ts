@@ -367,6 +367,7 @@ export const api = {
     email: string;
     password: string;
     username: string;
+    verification_code: string;
   }): Promise<{
     success: boolean;
     user: {
@@ -1018,7 +1019,6 @@ export const api = {
    */
   async toggleVideoPublic(videoId: string, isPublic: boolean): Promise<{
     success: boolean;
-    message: string;
   }> {
     console.log(`[API] 切换视频${videoId}公开状态:`, isPublic);
     try {
@@ -1029,7 +1029,9 @@ export const api = {
         const error = await response.json();
         throw new Error(error.detail || '切换公开状态失败');
       }
-      return await response.json();
+      const result = await response.json();
+      console.log(`[API] 视频${videoId}已${isPublic ? '开放' : '关闭'}到内容广场`);
+      return result;
     } catch (error) {
       console.error('切换公开状态失败:', error);
       throw error;
@@ -1091,6 +1093,66 @@ export const api = {
     } catch (error) {
       console.error('删除提示词失败:', error);
       throw error;
+    }
+  },
+
+  /**
+   * 获取精选视频列表（官网展示）
+   */
+  async getFeaturedVideos(category?: string, limit?: number): Promise<{
+    success: boolean;
+    videos: Array<{
+      id: string;
+      title: string;
+      subtitle: string;
+      videoUrl: string;
+      thumbnailUrl: string;
+      category: string;
+      tags: string[];
+      displayOrder: number;
+      viewCount: number;
+      likeCount: number;
+      productName: string;
+      platform: string;
+      description: string;
+    }>;
+  }> {
+    console.log('[API] 获取精选视频...', { category, limit });
+    try {
+      const params = new URLSearchParams();
+      if (category) params.append('category', category);
+      if (limit) params.append('limit', limit.toString());
+      
+      const url = `${API_BASE_URL}/api/featured-videos${params.toString() ? '?' + params.toString() : ''}`;
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        throw new Error('获取精选视频失败');
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('获取精选视频失败:', error);
+      return { success: false, videos: [] };
+    }
+  },
+
+  /**
+   * 获取精选视频分类列表
+   */
+  async getFeaturedCategories(): Promise<{
+    success: boolean;
+    categories: string[];
+  }> {
+    console.log('[API] 获取视频分类...');
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/featured-videos/categories`);
+      if (!response.ok) {
+        throw new Error('获取分类失败');
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('获取分类失败:', error);
+      return { success: false, categories: [] };
     }
   }
 };

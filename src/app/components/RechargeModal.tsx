@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { useState } from 'react';
 import { X, Zap, Check, CreditCard, Smartphone } from 'lucide-react';
 import { useStore } from '../lib/store';
 import { cn } from '../lib/utils';

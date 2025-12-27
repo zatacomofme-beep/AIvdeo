@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useState, useEffect } from 'react';
 import { X, User, Mail, CreditCard, History, Settings, LogOut, Edit2, Check } from 'lucide-react';
 import { useStore } from '../lib/store';
 import { cn } from '../lib/utils';
@@ -33,12 +32,12 @@ export function UserCenter({ isOpen, onClose, onLogout }: UserCenterProps) {
 
   // 获取用户统计数据
   useEffect(() => {
-    if (isOpen && user) {
+    if (isOpen && user?.id) {
       fetchUserInfo();      // 新增：先刷新用户信息（包括积分）
       fetchUserStats();
       fetchCreditsHistory();  // 新增：加载积分历史
     }
-  }, [isOpen, user]);
+  }, [isOpen, user?.id]);  // 只依赖 user.id，避免无限循环
 
   // 新增：刷新用户信息（包括积分）
   const fetchUserInfo = async () => {
